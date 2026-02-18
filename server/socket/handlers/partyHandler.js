@@ -131,6 +131,36 @@ const registerPartyHandler = (socket, io) => {
     } catch (err) { console.error(err); }
   });
 
+  socket.on('toggle_ready', async ({ roomCode, user }) => {
+    try {
+      const userId = user._id || user.id;
+      const party = await Party.findOne({ code: roomCode });
+
+      if (!party) return;
+
+      // Find member and toggle status
+      const member = party.members.find(m => m.id === userId);
+      if (member) {
+        member.isReady = !member.isReady;
+        await party.save();
+
+        // Broadcast update to everyone in the room
+        // broadcastPartyUpdate sends the full member list, so frontend can calculate counts
+        await broadcastPartyUpdate(roomCode, io);
+
+        // Check if ALL members are ready
+        const allReady = party.members.every(m => m.isReady);
+        if (allReady && party.members.length > 0) {
+           // For Step 2: This is where we will trigger 'game_start'
+           // For Step 1: Just let the frontend know everyone is ready via the update
+           console.log(`Party ${roomCode} is fully ready!`);
+        }
+      }
+    } catch (err) {
+      console.error("Ready Error:", err);
+    }
+  });
+
   socket.on('leave_party', async ({ user: userData, roomCode }) => {
     const userId = userData?._id || userData?.id;
 

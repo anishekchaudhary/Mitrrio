@@ -16,6 +16,7 @@ const Dashboard = () => {
   const [showSessionModal, setShowSessionModal] = useState(false);
 
   const [partyState, setPartyState] = useState('menu');
+  const [members, setMembers] = useState([]); 
   const [partyCode, setPartyCode] = useState("");
   const [partyError, setPartyError] = useState("");
   const [memberCount, setMemberCount] = useState(1);
@@ -38,7 +39,6 @@ const Dashboard = () => {
       };
     }
 
-    // create persistent guest
     const gid = Math.floor(1000 + Math.random() * 9000);
     const guestUser = {
       name: `Guest_${gid}`,
@@ -62,25 +62,15 @@ const Dashboard = () => {
     const identifyUser = () => {
       const userId = user.id || user._id;
       if (userId) {
-        console.log("Identifying as:", userId);
         socket.emit("identify", userId);
       }
     };
 
-    // identify when connected
     socket.on("connect", identifyUser);
 
-    // --- session replaced ---
-    const onSessionReplaced = () => {
-      setShowSessionModal(true);
-    };
+    const onSessionReplaced = () => setShowSessionModal(true);
+    const onSessionDenied = () => setShowSessionModal(true);
 
-    // --- session denied (extra protection) ---
-    const onSessionDenied = () => {
-      setShowSessionModal(true);
-    };
-
-    // --- elo updates ---
     const onEloUpdate = (data) => {
       setUser((prevUser) => {
         const updatedUser = {
@@ -93,7 +83,6 @@ const Dashboard = () => {
       });
     };
 
-    // --- party join ---
     const onJoinedParty = (data) => {
       setPartyCode(data.roomName);
       setPartyState("active");
@@ -101,11 +90,13 @@ const Dashboard = () => {
       setMaxSize(data.maxSize || 10);
       setPartyError("");
       if (data.myColor) setMyColor(data.myColor);
+      if (data.members) setMembers(data.members);
     };
 
     const onLeftParty = () => {
       setPartyCode("");
       setPartyState("menu");
+      setMembers([]);
       setMemberCount(1);
       setMyColor("#94a3b8");
     };
@@ -115,9 +106,11 @@ const Dashboard = () => {
     const onPartyUpdate = (data) => {
       setMemberCount(data.memberCount);
       setMaxSize(data.maxSize);
+      if (data.members) {
+        setMembers(data.members); 
+      }
     };
 
-    // listeners
     socket.on("session_denied", onSessionDenied);
     socket.on("session_replaced", onSessionReplaced);
     socket.on("joined_party", onJoinedParty);
@@ -149,14 +142,7 @@ const Dashboard = () => {
   const handleAuthSuccess = (userData, token) => {
     localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify(userData));
-
-    setUser({
-      ...userData,
-      name: userData.username,
-      isLoggedIn: true,
-      token
-    });
-
+    setUser({ ...userData, name: userData.username, isLoggedIn: true, token });
     socket.emit('identify', userData._id);
   };
 
@@ -164,49 +150,27 @@ const Dashboard = () => {
   // PARTY ACTIONS
   // ---------------------------
   const handleCreate = () => socket.emit('create_party', user);
-
   const handleJoin = (code) => {
     setPartyError("");
     if (code) socket.emit('join_private', { code, user });
   };
-
-  const handleLeave = () => {
-    socket.emit('leave_party', { user, roomCode: partyCode });
-  };
-
+  const handleLeave = () => socket.emit('leave_party', { user, roomCode: partyCode });
   const handlePlay = () => {
-    if (partyState === 'menu') {
-      socket.emit('join_public', user);
-    }
+    if (partyState === 'menu') socket.emit('join_public', user);
     navigate('/game');
   };
 
-  // ---------------------------
-  // SESSION MODAL ACTION
-  // ---------------------------
-  const handleCloseTab = () => {
-    window.location.href = "about:blank";
-  };
+  const handleCloseTab = () => { window.location.href = "about:blank"; };
 
-  // ---------------------------
-  // UI
-  // ---------------------------
   return (
     <div className="relative w-full h-screen bg-slate-950 font-sans text-slate-200 overflow-hidden">
+      <SessionReplaceModal isOpen={showSessionModal} onCloseTab={handleCloseTab} />
 
-      <SessionReplaceModal
-        isOpen={showSessionModal}
-        onCloseTab={handleCloseTab}
-      />
-
-      <div
+      {/* BACKGROUND */}
+      <div 
         className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000"
-        style={{
-          backgroundImage: "url('/Background.png')",
-          opacity: 0.7
-        }}
+        style={{ backgroundImage: "url('/Background.png')", opacity: 0.7 }}
       ></div>
-
       <div className="absolute inset-0 z-0 bg-gradient-to-t from-slate-950 via-slate-900/60 to-transparent"></div>
 
       <AuthModal
@@ -218,18 +182,17 @@ const Dashboard = () => {
       />
 
       <div className="relative z-10 w-full h-full md:overflow-hidden flex flex-col md:block p-4 md:p-0">
-
+        
+        {/* PROFILE WIDGET (TOP RIGHT) */}
         <div className="order-1 md:fixed md:top-6 md:right-6 md:z-30 w-full md:w-96 mb-4 md:mb-0 h-48 md:h-auto">
           <ProfileWidget
             user={user}
             onLogout={handleLogout}
-            onNavigate={(m) => {
-              setAuthMode(m);
-              setShowAuthModal(true);
-            }}
+            onNavigate={(m) => { setAuthMode(m); setShowAuthModal(true); }}
           />
         </div>
 
+        {/* GAME PANEL (CENTER) */}
         <div className="order-2 md:fixed md:inset-0 md:z-10 md:pointer-events-none flex items-center justify-center py-4 md:py-0">
           <GamePanel
             username={user.username || user.name}
@@ -239,6 +202,7 @@ const Dashboard = () => {
           />
         </div>
 
+        {/* PARTY WIDGET (BOTTOM RIGHT) */}
         <div className="order-3 md:fixed md:bottom-6 md:right-6 md:z-30 w-full md:w-96 mt-4 md:mt-0 h-64 md:h-auto">
           <PartyWidget
             partyState={partyState}
@@ -247,12 +211,19 @@ const Dashboard = () => {
             onCreateParty={handleCreate}
             onJoinPrivate={handleJoin}
             onLeaveParty={handleLeave}
+            
+            // Step 1 Logic Props
+            members={members}
+            currentUser={user}
+            onToggleReady={() => socket.emit('toggle_ready', { roomCode: partyCode, user })}
+            
             memberCount={memberCount}
             maxSize={maxSize}
             error={partyError}
           />
         </div>
 
+        {/* CHAT WIDGET (LEFT SIDE) */}
         <div className="order-4 md:fixed md:top-6 md:bottom-6 md:left-6 w-full md:w-96 md:z-20 mt-4 md:mt-0 h-64 md:h-auto">
           <ChatWidget
             isPartyMode={partyState === 'active'}
