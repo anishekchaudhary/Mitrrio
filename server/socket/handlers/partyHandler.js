@@ -3,8 +3,56 @@ const User = require('../../models/User');
 const { getUniqueColor, PLAYER_COLORS } = require('../services/colorService');
 const { handleActualLeave, broadcastPartyUpdate } = require('../services/partyService');
 const pendingRemovals = require('../state/pendingRemovals');
+const countdownTimers = new Map();
 
 const registerPartyHandler = (socket, io) => {
+
+  const cancelCountdown = (partyCode) => {
+    if (countdownTimers.has(partyCode)) {
+      clearTimeout(countdownTimers.get(partyCode));
+      countdownTimers.delete(partyCode);
+      
+      // Notify Chat (Red/Default Color)
+      io.to(partyCode).emit('receive_message', {
+        room: partyCode,
+        user: "System",
+        text: "Match start canceled.",
+        type: "system"
+      });
+      
+      // Reset Frontend State
+      io.to(partyCode).emit('countdown_canceled');
+    }
+  };
+
+  // --- HELPER: Start Countdown ---
+  const startCountdown = (partyCode) => {
+    if (countdownTimers.has(partyCode)) clearTimeout(countdownTimers.get(partyCode));
+
+    let count = 3;
+
+    const runTimer = () => {
+      // Broadcast to Chat with GREEN type
+      io.to(partyCode).emit('receive_message', {
+        room: partyCode,
+        user: "System",
+        text: count > 0 ? `Starting game in ${count}...` : "Starting game!",
+        type: "system_green" // <--- NEW TYPE FOR GREEN COLOR
+      });
+
+      if (count > 0) {
+        count--;
+        const timerId = setTimeout(runTimer, 1000);
+        countdownTimers.set(partyCode, timerId);
+      } else {
+        countdownTimers.delete(partyCode);
+        // Trigger Game Start
+        io.to(partyCode).emit('game_start', { gameId: partyCode });
+      }
+    };
+
+    runTimer();
+  };
 
   socket.on('join_public', async (userData) => {
     try {
@@ -138,22 +186,21 @@ const registerPartyHandler = (socket, io) => {
 
       if (!party) return;
 
-      // Find member and toggle status
       const member = party.members.find(m => m.id === userId);
       if (member) {
         member.isReady = !member.isReady;
         await party.save();
 
-        // Broadcast update to everyone in the room
-        // broadcastPartyUpdate sends the full member list, so frontend can calculate counts
         await broadcastPartyUpdate(roomCode, io);
 
-        // Check if ALL members are ready
-        const allReady = party.members.every(m => m.isReady);
-        if (allReady && party.members.length > 0) {
-           // For Step 2: This is where we will trigger 'game_start'
-           // For Step 1: Just let the frontend know everyone is ready via the update
-           console.log(`Party ${roomCode} is fully ready!`);
+        // Check if everyone is ready
+        const allReady = party.members.length > 0 && party.members.every(m => m.isReady);
+
+        if (allReady) {
+          startCountdown(roomCode);
+        } else {
+          // If someone un-readies, cancel it
+          cancelCountdown(roomCode);
         }
       }
     } catch (err) {
@@ -161,8 +208,14 @@ const registerPartyHandler = (socket, io) => {
     }
   });
 
+  // --- UPDATED: Leave Party ---
   socket.on('leave_party', async ({ user: userData, roomCode }) => {
+    // 1. Cancel Countdown first
+    cancelCountdown(roomCode);
+
+    // 2. Proceed with leave logic
     const userId = userData?._id || userData?.id;
+    const pendingRemovals = require('../state/pendingRemovals'); // Ensure this is imported at top if not already
 
     if (userId && pendingRemovals.has(userId)) {
       clearTimeout(pendingRemovals.get(userId));
