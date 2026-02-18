@@ -63,10 +63,17 @@ const Dashboard = () => {
       const userId = user.id || user._id;
       if (userId) {
         socket.emit("identify", userId);
+        // NEW: Request state sync immediately
+        socket.emit("sync_party_state", user); 
       }
     };
 
     socket.on("connect", identifyUser);
+
+    // If socket was already connected when component mounted (navigation)
+    if (socket.connected) {
+        identifyUser();
+    }
 
     const onSessionReplaced = () => setShowSessionModal(true);
     const onSessionDenied = () => setShowSessionModal(true);
@@ -90,6 +97,9 @@ const Dashboard = () => {
       setMaxSize(data.maxSize || 10);
       setPartyError("");
       if (data.myColor) setMyColor(data.myColor);
+      
+      // Ensure we use the members list from the server, 
+      // which will now have isReady: false
       if (data.members) setMembers(data.members);
     };
 

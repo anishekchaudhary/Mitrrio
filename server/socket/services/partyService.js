@@ -39,17 +39,52 @@ const handleActualLeave = async (userId, username, roomCode, io) => {
   }
 };
 
-const broadcastPartyUpdate = async (roomCode, io) => {
-  const Party = require('../../models/Party');
-  const party = await Party.findOne({ code: roomCode });
-
-  if (party) {
-    io.to(roomCode).emit('party_update', {
-      memberCount: party.members.length,
-      maxSize: party.maxSize,
-      members: party.members
-    });
+const removeUserFromAllParties = async (userId, io) => {
+  try {
+    // Find all parties where this user is a member
+    const parties = await Party.find({ "members.id": userId });
+    
+    for (const party of parties) {
+      console.log(`[Cleanup] Removing user ${userId} from old party ${party.code}`);
+      
+      // Use the existing leave logic to handle cleanup/deletion/broadcast
+      // passing 'io' ensures the old lobby UI updates for other players
+      await handleActualLeave(userId, null, party.code, io);
+    }
+  } catch (err) {
+    console.error("Remove from all parties error:", err);
+  }
+};const broadcastPartyUpdate = async (roomCode, io) => {
+   // ... keep existing logic
+   try {
+    const party = await Party.findOne({ code: roomCode });
+    if (party) {
+      io.to(roomCode).emit('party_update', {
+        roomName: party.code,
+        isPublic: party.type === 'public',
+        memberCount: party.members.length,
+        maxSize: party.maxSize,
+        members: party.members // Ensure members are sent
+      });
+    }
+  } catch (err) {
+    console.error("Broadcast Error:", err);
   }
 };
 
-module.exports = { handleActualLeave, broadcastPartyUpdate };
+const resetPartyReadiness = async (roomCode) => {
+  // ... keep existing logic
+   try {
+    await Party.findOneAndUpdate(
+      { code: roomCode },
+      { $set: { "members.$[].isReady": false } }
+    );
+  } catch (err) { console.error(err); }
+};
+
+module.exports = { 
+  handleActualLeave, 
+  broadcastPartyUpdate, 
+  resetPartyReadiness,
+  removeUserFromAllParties // <--- EXPORT THIS
+};
