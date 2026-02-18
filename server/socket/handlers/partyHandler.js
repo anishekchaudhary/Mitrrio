@@ -1,21 +1,15 @@
 const Party = require('../../models/Party');
 const User = require('../../models/User');
-const { getUniqueColor } = require('../utils/colorUtils');
-const { broadcastPartyUpdate, handleActualLeave } = require('../utils/partyUtils');
+const { getUniqueColor, PLAYER_COLORS } = require('../services/colorService');
+const { handleActualLeave, broadcastPartyUpdate } = require('../services/partyService');
+const pendingRemovals = require('../state/pendingRemovals');
 
-module.exports = (io, socket) => {
+const registerPartyHandler = (socket, io) => {
 
-  // -------------------------------
-  // JOIN PUBLIC (current behavior)
-  // -------------------------------
   socket.on('join_public', async (userData) => {
     try {
       const userId = userData._id || userData.id;
-
-      let party = await Party.findOne({
-        type: 'public',
-        $expr: { $lt: [{ $size: "$members" }, 4] }
-      });
+      let party = await Party.findOne({ type: 'public', $expr: { $lt: [{ $size: "$members" }, 4] } });
 
       if (!party) {
         const code = `PUB_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
@@ -48,7 +42,7 @@ module.exports = (io, socket) => {
         myColor
       });
 
-      await broadcastPartyUpdate(io, party.code);
+      broadcastPartyUpdate(party.code, io);
 
       io.to(party.code).emit('receive_message', {
         room: party.code,
@@ -57,19 +51,14 @@ module.exports = (io, socket) => {
         type: "system"
       });
 
-    } catch (err) {
-      console.error(err);
-    }
+    } catch (err) { console.error(err); }
   });
 
-  // -------------------------------
-  // CREATE PRIVATE PARTY
-  // -------------------------------
   socket.on('create_party', async (userData) => {
     try {
       const userId = userData._id || userData.id || "host";
       const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-      const myColor = "#ef4444";
+      const myColor = PLAYER_COLORS[0];
 
       const newParty = new Party({
         code,
@@ -95,14 +84,9 @@ module.exports = (io, socket) => {
         myColor
       });
 
-    } catch (err) {
-      console.error(err);
-    }
+    } catch (err) { console.error(err); }
   });
 
-  // -------------------------------
-  // JOIN PRIVATE PARTY
-  // -------------------------------
   socket.on('join_private', async ({ code, user: userData }) => {
     try {
       const party = await Party.findOne({ code });
@@ -135,7 +119,7 @@ module.exports = (io, socket) => {
         myColor
       });
 
-      await broadcastPartyUpdate(io, code);
+      broadcastPartyUpdate(code, io);
 
       io.to(code).emit('receive_message', {
         room: code,
@@ -144,23 +128,23 @@ module.exports = (io, socket) => {
         type: "system"
       });
 
-    } catch (err) {
-      console.error(err);
-    }
+    } catch (err) { console.error(err); }
   });
 
-  // -------------------------------
-  // MANUAL LEAVE PARTY
-  // -------------------------------
   socket.on('leave_party', async ({ user: userData, roomCode }) => {
     const userId = userData?._id || userData?.id;
 
-    await handleActualLeave(io, userId, userData?.username, roomCode);
+    if (userId && pendingRemovals.has(userId)) {
+      clearTimeout(pendingRemovals.get(userId));
+      pendingRemovals.delete(userId);
+    }
+
+    await handleActualLeave(userId, userData?.username, roomCode, io);
 
     socket.leave(roomCode);
     socket.join('global');
-
     socket.emit('left_party');
   });
-
 };
+
+module.exports = registerPartyHandler;

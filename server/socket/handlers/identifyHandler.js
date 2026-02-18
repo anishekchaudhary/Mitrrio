@@ -1,69 +1,46 @@
 const Party = require('../../models/Party');
-const activeUsers = require('../state/activeUsers');
+const User = require('../../models/User');
 const pendingRemovals = require('../state/pendingRemovals');
 
-// NEW: lock who currently owns session
-const sessionOwners = new Map();
-// userId -> socketId
-
-module.exports = (io, socket) => {
-
+const registerIdentifyHandler = (socket) => {
   socket.on('identify', async (userId) => {
     socket.userId = userId;
 
-    const existingSocketId = activeUsers.get(userId);
-    const currentOwner = sessionOwners.get(userId);
-
-    // -------------------------------
-    // HARD CONTROL LOGIC
-    // -------------------------------
-
-    if (existingSocketId && existingSocketId !== socket.id) {
-
-      // if someone already owns session → reject reclaim spam
-      if (currentOwner && currentOwner !== socket.id) {
-        socket.emit("session_denied");
-        return;
-      }
-
-      const existingSocket = io.sockets.sockets.get(existingSocketId);
-
-      if (existingSocket) {
-        existingSocket.emit("session_replaced");
-        existingSocket.disconnect();
-      }
-    }
-
-    // new socket becomes owner
-    activeUsers.set(userId, socket.id);
-    sessionOwners.set(userId, socket.id);
-
-    // cancel pending disconnect removal
+    // cancel disconnect removal if reconnect
     if (pendingRemovals.has(userId)) {
+      console.log(`User ${userId} reconnected. Cancelling removal.`);
       clearTimeout(pendingRemovals.get(userId));
       pendingRemovals.delete(userId);
     }
 
-    // rejoin party after refresh
     try {
-      const party = await Party.findOne({ "members.id": userId });
-      if (party) {
-        socket.join(party.code);
-        socket.leave('global');
+      // 🔥 SOURCE OF TRUTH → USER.currentParty
+      if (!userId || userId.toString().startsWith('guest')) return;
 
-        const me = party.members.find(m => m.id === userId);
+      const userDoc = await User.findById(userId);
+      if (!userDoc || !userDoc.currentParty) return;
 
-        socket.emit('joined_party', {
-          roomName: party.code,
-          isPublic: party.type === 'public',
-          memberCount: party.members.length,
-          maxSize: party.maxSize,
-          myColor: me ? me.color : '#94a3b8'
-        });
-      }
+      const party = await Party.findOne({ code: userDoc.currentParty });
+      if (!party) return;
+
+      // safe rejoin
+      socket.join(party.code);
+      socket.leave('global');
+
+      const me = party.members.find(m => m.id === userId);
+
+      socket.emit('joined_party', {
+        roomName: party.code,
+        isPublic: party.type === 'public',
+        memberCount: party.members.length,
+        maxSize: party.maxSize,
+        myColor: me ? me.color : '#94a3b8'
+      });
+
     } catch (err) {
       console.error("Rejoin Error:", err);
     }
   });
-
 };
+
+module.exports = registerIdentifyHandler;
