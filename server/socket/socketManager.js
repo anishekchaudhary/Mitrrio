@@ -1,45 +1,43 @@
 const User = require('../models/User');
 const Party = require('../models/Party');
 
+const PLAYER_COLORS = [
+  "#ef4444", "#f97316", "#eab308", "#84cc16", "#10b981", 
+  "#06b6d4", "#3b82f6", "#8b5cf6", "#d946ef", "#f43f5e"
+];
+
 const socketManager = (io) => {
-  // Helper: Notify all clients in a room about the new member count
+  // Helper: Get first unused color
+  const getUniqueColor = (members) => {
+    const usedColors = members.map(m => m.color);
+    return PLAYER_COLORS.find(c => !usedColors.includes(c)) || '#94a3b8';
+  };
+
   const broadcastPartyUpdate = async (roomCode) => {
     const party = await Party.findOne({ code: roomCode });
     if (party) {
       io.to(roomCode).emit('party_update', {
         memberCount: party.members.length,
-        maxSize: party.maxSize
+        maxSize: party.maxSize,
+        members: party.members 
       });
     }
   };
 
   io.on('connection', async (socket) => {
     console.log('User Connected:', socket.id);
-    
-    // 1. Auto-Join Global Chat
     socket.join('global');
 
-    // --- Chat Logic ---
-    socket.on('join_room', (room) => {
-      // Optional: If joining specific room via ChatWidget, ensure we handle switches
-      // For now, Party logic handles the heavy lifting of switching rooms
-      socket.join(room);
-    });
-
     socket.on('send_message', (data) => {
-      // Security: Ensure user is actually in the room they are sending to
       if (socket.rooms.has(data.room)) {
         io.to(data.room).emit('receive_message', data);
       }
     });
 
-    // --- Party Logic ---
-
     // 1. JOIN PUBLIC
     socket.on('join_public', async (userData) => {
       try {
         const userId = userData._id || userData.id;
-        
         let party = await Party.findOne({ type: 'public', $expr: { $lt: [{ $size: "$members" }, 4] } });
 
         if (!party) {
@@ -48,24 +46,31 @@ const socketManager = (io) => {
         }
 
         const isMember = party.members.some(m => m.id === userId);
+        let myColor = '#94a3b8';
+
         if (!isMember) {
-          party.members.push({ id: userId, username: userData.username });
+          myColor = getUniqueColor(party.members);
+          party.members.push({ id: userId, username: userData.username, color: myColor });
           await party.save();
+        } else {
+          const member = party.members.find(m => m.id === userId);
+          myColor = member.color;
         }
 
         if (userId && !userId.toString().startsWith('guest')) {
           await User.findByIdAndUpdate(userId, { currentParty: party.code });
         }
 
-        // Room Switch Logic: Leave Global, Join Party
         socket.leave('global'); 
         socket.join(party.code);
         
+        // EMIT MYCOLOR HERE
         socket.emit('joined_party', { 
           roomName: party.code, 
           isPublic: true,
           memberCount: party.members.length,
-          maxSize: party.maxSize
+          maxSize: party.maxSize,
+          myColor: myColor 
         });
 
         broadcastPartyUpdate(party.code);
@@ -85,12 +90,14 @@ const socketManager = (io) => {
       try {
         const userId = userData._id || userData.id || "host";
         const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+        
+        const myColor = PLAYER_COLORS[0]; // Host gets first color
 
         const newParty = new Party({
           code,
           type: 'private',
           maxSize: 10,
-          members: [{ id: userId, username: userData.username, isLeader: true }]
+          members: [{ id: userId, username: userData.username, isLeader: true, color: myColor }]
         });
 
         await newParty.save();
@@ -99,7 +106,6 @@ const socketManager = (io) => {
            await User.findByIdAndUpdate(userId, { currentParty: code });
         }
 
-        // Room Switch Logic
         socket.leave('global');
         socket.join(code);
 
@@ -107,7 +113,8 @@ const socketManager = (io) => {
           roomName: code, 
           isPublic: false,
           memberCount: 1,
-          maxSize: 10
+          maxSize: 10,
+          myColor: myColor
         });
 
       } catch (err) {
@@ -124,18 +131,22 @@ const socketManager = (io) => {
         if (party.members.length >= party.maxSize) return socket.emit('party_error', 'Party full.');
 
         const userId = userData._id || userData.id;
-        
+        let myColor = '#94a3b8';
+
         const isMember = party.members.some(m => m.id === userId);
         if (!isMember) {
-          party.members.push({ id: userId, username: userData.username });
+          myColor = getUniqueColor(party.members);
+          party.members.push({ id: userId, username: userData.username, color: myColor });
           await party.save();
           
           if (userId && !userId.toString().startsWith('guest')) {
             await User.findByIdAndUpdate(userId, { currentParty: code });
           }
+        } else {
+           const member = party.members.find(m => m.id === userId);
+           myColor = member.color;
         }
 
-        // Room Switch Logic
         socket.leave('global');
         socket.join(code);
         
@@ -143,7 +154,8 @@ const socketManager = (io) => {
           roomName: code, 
           isPublic: false,
           memberCount: party.members.length,
-          maxSize: party.maxSize
+          maxSize: party.maxSize,
+          myColor: myColor
         });
 
         broadcastPartyUpdate(code);
@@ -158,23 +170,15 @@ const socketManager = (io) => {
       }
     });
 
-    // 4. LEAVE PARTY (Fixed)
+    // 4. LEAVE PARTY
     socket.on('leave_party', async ({ user: userData, roomCode }) => {
-      // 1. Immediate Socket Cleanup (Vital for UI responsiveness)
-      if (roomCode) {
-        socket.leave(roomCode);
-        console.log(`Socket ${socket.id} left room ${roomCode}`);
-      }
-      
-      // 2. Return to Global
+      if (roomCode) socket.leave(roomCode);
       socket.join('global');
-      socket.emit('left_party'); // Tell frontend to switch UI
+      socket.emit('left_party'); 
 
-      // 3. Database Cleanup
       if (!userData) return;
       try {
         const userId = userData._id || userData.id;
-        // Use provided roomCode to find party, fallback to DB search
         const query = roomCode ? { code: roomCode } : { "members.id": userId };
         const party = await Party.findOne(query);
         
@@ -184,7 +188,6 @@ const socketManager = (io) => {
           
           if (party.members.length === 0) {
             await Party.findByIdAndDelete(party._id);
-            console.log(`Party ${actualCode} destroyed.`);
           } else {
             await party.save();
             broadcastPartyUpdate(actualCode);
@@ -192,7 +195,6 @@ const socketManager = (io) => {
               room: actualCode, user: "System", text: `${userData.username} left.`, type: "system" 
             });
           }
-
           if (userId && !userId.toString().startsWith('guest')) {
             await User.findByIdAndUpdate(userId, { currentParty: null });
           }

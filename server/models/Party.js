@@ -5,11 +5,11 @@ const PartySchema = new mongoose.Schema({
   type: { type: String, enum: ['public', 'private'], required: true },
   maxSize: { type: Number, required: true },
   
-  // CHANGED: Store simple objects instead of strict ObjectIds
   members: [{ 
-    id: String,       // Can be "guest_123" OR "65d4..." (MongoID)
-    username: String, // Store username for easy display
-    isLeader: { type: Boolean, default: false }
+    id: String,       
+    username: String, 
+    isLeader: { type: Boolean, default: false },
+    color: { type: String, default: '#94a3b8' } // Store assigned color
   }], 
 }, { timestamps: true });
 
