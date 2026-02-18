@@ -1,20 +1,22 @@
 const mongoose = require('mongoose');
 
-const MemberSchema = new mongoose.Schema({
-  id: String,
-  username: String,
-  isLeader: { type: Boolean, default: false },
-  color: String,
-  // NEW: Track readiness
-  isReady: { type: Boolean, default: false }
-}, { _id: false });
-
 const PartySchema = new mongoose.Schema({
   code: { type: String, required: true, unique: true },
-  type: { type: String, enum: ['public', 'private'], default: 'private' },
-  members: [MemberSchema],
-  maxSize: { type: Number, default: 10 },
-  createdAt: { type: Date, default: Date.now, expires: 3600 } // Auto-delete after 1 hour
-});
+  type: { type: String, enum: ['public', 'private'], required: true },
+  maxSize: { type: Number, required: true },
+  
+  members: [{ 
+    id: String,       
+    username: String, 
+    isLeader: { type: Boolean, default: false },
+    color: { type: String, default: '#94a3b8' },
+    // ADD THIS FIELD
+    isReady: { type: Boolean, default: false }, 
+    // Add these for guest persistence as previously discussed
+    elo: { type: Number, default: 1200 },
+    xp: { type: Number, default: 0 },
+    gamesPlayed: { type: Number, default: 0 }
+  }], 
+}, { timestamps: true });
 
 module.exports = mongoose.model('Party', PartySchema);

@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { socket } from '../utils/socket';
 import { Trophy, Timer, ArrowLeft, Home } from 'lucide-react';
-// NEW IMPORT
 import ChatWidget from '../components/ChatWidget'; 
 
 const GamePage = () => {
@@ -10,16 +9,17 @@ const GamePage = () => {
   const navigate = useNavigate();
   const [gameState, setGameState] = useState({ players: [], finished: [], isFinished: false });
   
+  // Read user from storage
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const userId = user.id || user._id;
-  // Fallback color if not found in state (Sync usually handles this, but good to be safe)
   const myColor = gameState.players.find(p => p.id === userId)?.color || "#94a3b8";
 
   const myRank = gameState.finished.find(p => p.id === userId);
 
   useEffect(() => {
     if (!socket.connected) socket.connect();
-    // Ensure we are identified and synced even on direct load
+    
+    // Ident & Sync
     if (userId) {
         socket.emit('identify', userId);
         socket.emit('sync_party_state', user);
@@ -28,20 +28,46 @@ const GamePage = () => {
     socket.emit('get_game_state', roomId);
 
     const onGameUpdate = (data) => setGameState(data);
-    socket.on('game_update', onGameUpdate);
+    
+    // --- NEW: Listen for Elo/XP Updates here ---
+    const onEloUpdate = (data) => {
+      // 1. Verify this update is for ME
+      if (String(data.userId) !== String(userId)) return;
 
-    return () => socket.off('game_update', onGameUpdate);
+      console.log("[GamePage] Received Stats Update:", data);
+
+      // 2. Update LocalStorage immediately
+      const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+      const updatedUser = {
+        ...currentUser,
+        elo: data.elo,
+        xp: data.xp,
+        gamesPlayed: data.gamesPlayed
+      };
+      
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+    };
+    // -------------------------------------------
+
+    socket.on('game_update', onGameUpdate);
+    socket.on('elo_update', onEloUpdate); // <--- Bind Listener
+
+    return () => {
+      socket.off('game_update', onGameUpdate);
+      socket.off('elo_update', onEloUpdate); // <--- Unbind Listener
+    };
   }, [roomId, userId]);
 
   const handleWinClick = () => {
     if (!myRank) socket.emit('submit_win', { roomCode: roomId, userId });
   };
 
+  // ... rest of the render code (JSX) remains exactly the same ...
   return (
     <div className="h-screen bg-slate-950 text-white font-sans flex overflow-hidden">
-      
-      {/* 1. CHAT SIDEBAR (Visible on Desktop) */}
-      <div className="w-80 border-r border-slate-800 bg-slate-900/50 hidden md:block shrink-0">
+       {/* ... existing JSX ... */}
+       {/* (Keep the ChatWidget, Overlays, etc. as they were) */}
+       <div className="w-80 border-r border-slate-800 bg-slate-900/50 hidden md:block shrink-0">
         <ChatWidget 
             isPartyMode={true} 
             partyCode={roomId} 
@@ -50,9 +76,7 @@ const GamePage = () => {
         />
       </div>
 
-      {/* 2. MAIN GAME CONTENT */}
       <div className="flex-1 flex flex-col relative overflow-y-auto">
-        
         {/* GAME OVER OVERLAY */}
         {gameState.isFinished && (
             <div className="absolute inset-0 z-50 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-4 animate-in fade-in duration-500">
