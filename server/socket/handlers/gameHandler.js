@@ -5,49 +5,48 @@ const { calculateNewRatings } = require('../../utils/elo');
 
 const registerGameHandler = (socket, io) => {
   
-  // 1. Get Initial State
   socket.on('get_game_state', (roomCode) => {
     const gameState = getGameState(roomCode);
     if (gameState) socket.emit('game_update', gameState);
   });
 
-  // 2. Handle Finish/Win Click
   socket.on('submit_win', async ({ roomCode, userId }) => {
     const updatedGame = handleWin(roomCode, userId);
     
     if (updatedGame) {
-      // Broadcast live leaderboard update
       io.to(roomCode).emit('game_update', updatedGame);
 
-      // 3. Logic when the match is officially over
       if (updatedGame.isFinished) {
         try {
-          // A. Reset readiness in DB so users return to lobby as "Not Ready"
           await resetPartyReadiness(roomCode);
           
-          // B. Pairwise Elo Calculation
           const finishedPlayers = updatedGame.finished;
-          const userDocs = await User.find({ 
-            _id: { $in: finishedPlayers.map(p => p.id).filter(id => !id.toString().startsWith('guest')) } 
-          });
+          
+          // Get registered users (exclude guests)
+          const registeredIds = finishedPlayers
+            .map(p => p.id)
+            .filter(id => !id.toString().startsWith('guest'));
 
+          const userDocs = await User.find({ _id: { $in: registeredIds } });
           const userMap = new Map(userDocs.map(u => [u._id.toString(), u]));
 
           for (let i = 0; i < finishedPlayers.length; i++) {
             const playerA = finishedPlayers[i];
+            
+            // Skip guests for DB updates
             if (playerA.id.toString().startsWith('guest')) continue;
 
             let totalEloChange = 0;
             const userA = userMap.get(playerA.id.toString());
             const currentEloA = userA?.elo || 1200;
 
+            // 1. Calculate Elo Change
             for (let j = 0; j < finishedPlayers.length; j++) {
               if (i === j) continue;
               const playerB = finishedPlayers[j];
               const userB = userMap.get(playerB.id.toString());
               const currentEloB = userB?.elo || 1200;
 
-              // Pairwise comparison: If A's rank is lower (1st vs 2nd), A won
               const { newWinnerRating, newLoserRating } = calculateNewRatings(currentEloA, currentEloB);
               
               const change = (playerA.rank < playerB.rank) 
@@ -57,30 +56,44 @@ const registerGameHandler = (socket, io) => {
               totalEloChange += change;
             }
 
-            // Average the Elo change across all opponents
-            const finalEloChange = Math.round(totalEloChange / (finishedPlayers.length - 1));
+            const divisor = Math.max(1, finishedPlayers.length - 1);
+            const finalEloChange = Math.round(totalEloChange / divisor);
+
+            // 2. Calculate XP Gain (Bonus for Rank 1, 2, 3)
+            // Base 50XP + Bonus
+            const rankBonus = Math.max(0, (4 - playerA.rank) * 10); // 1st:+30, 2nd:+20, 3rd:+10
+            const xpGain = 50 + rankBonus;
+
+            // 3. Update DB
             const updatedUser = await User.findByIdAndUpdate(
               playerA.id, 
-              { $inc: { elo: finalEloChange, xp: 50 } }, 
+              { 
+                $inc: { 
+                  elo: finalEloChange, 
+                  xp: xpGain,
+                  gamesPlayed: 1 // Increment Games Played
+                } 
+              }, 
               { new: true }
             );
 
-            // Notify specific client to update their ProfileWidget
+            // 4. Emit Update to Client
+            // We send gamesPlayed and new XP so the profile widget updates instantly
             io.to(roomCode).emit('elo_update', { 
               userId: playerA.id, 
               elo: updatedUser.elo, 
+              xp: updatedUser.xp,
+              gamesPlayed: updatedUser.gamesPlayed,
               change: finalEloChange 
             });
           }
 
-          // C. Broadcast party update to reflect "Not Ready" states in Dashboard
           await broadcastPartyUpdate(roomCode, io);
 
-          // D. Final System Message
           io.to(roomCode).emit('receive_message', {
             room: roomCode,
             user: "System",
-            text: "🏁 Match Complete! Everyone finished. Ratings updated.",
+            text: "🏁 Match Complete! Profiles updated.",
             type: "system_green"
           });
 
