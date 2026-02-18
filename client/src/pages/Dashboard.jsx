@@ -17,31 +17,65 @@ const Dashboard = () => {
   const [partyError, setPartyError] = useState("");
   const [memberCount, setMemberCount] = useState(1);
   const [maxSize, setMaxSize] = useState(10);
-
-  // Default color is Grey (Global/Lobby inactive)
   const [myColor, setMyColor] = useState("#94a3b8"); 
 
+  // --- 1. USER INITIALIZATION (PERSIST GUEST ID) ---
   const [user, setUser] = useState(() => {
+    // Try to get user from local storage
     const saved = localStorage.getItem('user');
     if (saved && saved !== "undefined") {
       return JSON.parse(saved);
     }
+    
+    // If no user found, create a persistent Guest ID
     const gid = Math.floor(1000 + Math.random() * 9000);
-    return { name: `Guest_${gid}`, username: `Guest_${gid}`, id: `guest_${gid}`, isLoggedIn: false, elo: 1000, xp: 0 };
+    const guestUser = { 
+      name: `Guest_${gid}`, 
+      username: `Guest_${gid}`, 
+      id: `guest_${gid}`, 
+      isLoggedIn: false, 
+      elo: 1000, 
+      xp: 0 
+    };
+
+    // SAVE IMMEDIATELY so refresh keeps same guest ID
+    localStorage.setItem('user', JSON.stringify(guestUser));
+    return guestUser;
   });
 
+  // --- 2. SOCKET CONNECTION & EVENT LISTENERS ---
   useEffect(() => {
-    socket.connect();
-    if (user.id || user._id) socket.emit('identify', user.id || user._id);
+    // Connect Socket
+    if (!socket.connected) socket.connect();
+    
+    // IDENTIFY IMMEDIATELY: Tells server "I am this User ID"
+    // This cancels the 30s timeout on the server
+    const userId = user.id || user._id;
+    if (userId) {
+      console.log("Identifying as:", userId);
+      socket.emit('identify', userId);
+    }
+
+    // Handlers
+    const onEloUpdate = (data) => {
+      setUser((prevUser) => {
+        const updatedUser = { 
+          ...prevUser, 
+          elo: data.elo, 
+          xp: data.xp || prevUser.xp 
+        };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        return updatedUser;
+      });
+    };
 
     const onJoinedParty = (data) => {
+      console.log("Joined Party:", data);
       setPartyCode(data.roomName);
       setPartyState('active');
       setMemberCount(data.memberCount || 1);
       setMaxSize(data.maxSize || 10);
       setPartyError("");
-      
-      // UPDATE: Set the color assigned by the server
       if (data.myColor) setMyColor(data.myColor);
     };
 
@@ -49,12 +83,11 @@ const Dashboard = () => {
       setPartyCode("");
       setPartyState('menu');
       setMemberCount(1);
-      
-      // UPDATE: Reset color to Grey when leaving party
       setMyColor("#94a3b8");
     };
 
     const onPartyError = (err) => setPartyError(err);
+    
     const onPartyUpdate = (data) => {
       setMemberCount(data.memberCount);
       setMaxSize(data.maxSize);
@@ -64,14 +97,16 @@ const Dashboard = () => {
     socket.on('left_party', onLeftParty);
     socket.on('party_error', onPartyError);
     socket.on('party_update', onPartyUpdate);
+    socket.on('elo_update', onEloUpdate);
 
     return () => {
       socket.off('joined_party', onJoinedParty);
       socket.off('left_party', onLeftParty);
       socket.off('party_error', onPartyError);
       socket.off('party_update', onPartyUpdate);
+      socket.off('elo_update', onEloUpdate);
     };
-  }, [user]);
+  }, [user]); // Re-run if user object changes (rarely happens except login)
 
   const handleLogout = () => {
     localStorage.clear();
@@ -82,14 +117,17 @@ const Dashboard = () => {
     localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify(userData));
     setUser({ ...userData, name: userData.username, isLoggedIn: true, token });
+    // Emit identify again because ID changed from Guest -> User
     socket.emit('identify', userData._id);
   };
 
   const handleCreate = () => socket.emit('create_party', user);
+  
   const handleJoin = (code) => { 
     setPartyError("");
     if (code) socket.emit('join_private', { code, user }); 
   };
+  
   const handleLeave = () => { 
     socket.emit('leave_party', { user, roomCode: partyCode }); 
   };

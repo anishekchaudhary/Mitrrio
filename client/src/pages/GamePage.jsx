@@ -26,5 +26,14 @@ const GamePage = () => {
     </div>
   );
 };
+const handleGameOver = (winnerId, loserId) => {
+    // 1. Show Game Over UI
+    
+    // 2. Report result to server for Elo calculation
+    socket.emit('game_end', { 
+        winnerId: winnerId, 
+        loserId: loserId 
+    });
+};
 
 export default GamePage;
