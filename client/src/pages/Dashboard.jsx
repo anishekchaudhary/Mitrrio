@@ -106,7 +106,13 @@ const Dashboard = () => {
 
   return (
     <div className="relative w-full h-screen bg-slate-950 font-sans text-slate-200 overflow-hidden">
-      <div className="absolute inset-0 z-0 opacity-40 bg-cover bg-center" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1550745165-9bc0b252726f?q=80&w=2070&auto=format&fit=crop')" }}></div>
+      <div 
+        className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000" 
+        style={{ 
+          backgroundImage: "url('/Background.png')",
+          opacity: 0.7 // Adjust opacity based on your image brightness
+        }}
+      ></div>
       <div className="absolute inset-0 z-0 bg-gradient-to-t from-slate-950 via-slate-900/60 to-transparent"></div>
 
       <AuthModal isOpen={showAuthModal} initialMode={authMode} onClose={() => setShowAuthModal(false)} onLogin={handleAuthSuccess} guestData={user} />
