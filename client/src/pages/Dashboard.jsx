@@ -18,6 +18,9 @@ const Dashboard = () => {
   const [memberCount, setMemberCount] = useState(1);
   const [maxSize, setMaxSize] = useState(10);
 
+  // Default color is Grey (Global/Lobby inactive)
+  const [myColor, setMyColor] = useState("#94a3b8"); 
+
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('user');
     if (saved && saved !== "undefined") {
@@ -37,19 +40,21 @@ const Dashboard = () => {
       setMemberCount(data.memberCount || 1);
       setMaxSize(data.maxSize || 10);
       setPartyError("");
+      
+      // UPDATE: Set the color assigned by the server
+      if (data.myColor) setMyColor(data.myColor);
     };
 
     const onLeftParty = () => {
       setPartyCode("");
       setPartyState('menu');
       setMemberCount(1);
-      // Explicitly tell chat widget we are back in global
-      // Note: socketManager automatically joins 'global' on leave_party, 
-      // but this helps frontend logic sync up if needed.
+      
+      // UPDATE: Reset color to Grey when leaving party
+      setMyColor("#94a3b8");
     };
 
     const onPartyError = (err) => setPartyError(err);
-
     const onPartyUpdate = (data) => {
       setMemberCount(data.memberCount);
       setMaxSize(data.maxSize);
@@ -68,11 +73,6 @@ const Dashboard = () => {
     };
   }, [user]);
 
-  const [nickname, setNickname] = useState(user.name);
-  const [color, setColor] = useState("#3b82f6");
-
-  useEffect(() => setNickname(user.name), [user.name]);
-
   const handleLogout = () => {
     localStorage.clear();
     window.location.reload();
@@ -86,13 +86,10 @@ const Dashboard = () => {
   };
 
   const handleCreate = () => socket.emit('create_party', user);
-  
   const handleJoin = (code) => { 
     setPartyError("");
     if (code) socket.emit('join_private', { code, user }); 
   };
-
-  // FIX: Send partyCode so backend knows exactly which room to leave
   const handleLeave = () => { 
     socket.emit('leave_party', { user, roomCode: partyCode }); 
   };
@@ -110,7 +107,7 @@ const Dashboard = () => {
         className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000" 
         style={{ 
           backgroundImage: "url('/Background.png')",
-          opacity: 0.7 // Adjust opacity based on your image brightness
+          opacity: 0.7 
         }}
       ></div>
       <div className="absolute inset-0 z-0 bg-gradient-to-t from-slate-950 via-slate-900/60 to-transparent"></div>
@@ -123,7 +120,12 @@ const Dashboard = () => {
         </div>
 
         <div className="order-2 md:fixed md:inset-0 md:z-10 md:pointer-events-none flex items-center justify-center py-4 md:py-0">
-          <GamePanel nickname={nickname} setNickname={setNickname} color={color} setColor={setColor} onPlay={handlePlay} onSpectate={() => navigate('/spectate')} />
+          <GamePanel 
+            username={user.username || user.name} 
+            color={myColor} 
+            onPlay={handlePlay} 
+            onSpectate={() => navigate('/spectate')} 
+          />
         </div>
 
         <div className="order-3 md:fixed md:bottom-6 md:right-6 md:z-30 w-full md:w-96 mt-4 md:mt-0 h-64 md:h-auto">
@@ -144,7 +146,8 @@ const Dashboard = () => {
            <ChatWidget 
              isPartyMode={partyState === 'active'} 
              partyCode={partyCode} 
-             username={user.username || user.name} 
+             username={user.username || user.name}
+             myColor={myColor}
            />
         </div>
       </div>

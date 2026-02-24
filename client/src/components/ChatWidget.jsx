@@ -2,17 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Users, Send, Globe } from 'lucide-react';
 import { socket } from '../utils/socket';
 
-const ChatWidget = ({ isPartyMode, partyCode, username }) => {
+const ChatWidget = ({ isPartyMode, partyCode, username, myColor }) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const messagesEndRef = useRef(null);
 
-  // If party mode is active, use the code; otherwise use "global"
   const activeRoom = isPartyMode ? partyCode : "global";
 
-  // 1. Notify user of switch
   useEffect(() => {
-    // Only add system message if we actually have a code or it is global
     if (activeRoom) {
       setMessages((prev) => {
         const updated = [
@@ -29,7 +26,6 @@ const ChatWidget = ({ isPartyMode, partyCode, username }) => {
     }
   }, [activeRoom, isPartyMode]);
 
-  // 2. Listen for Messages
   useEffect(() => {
     const handleMessage = (data) => {
       setMessages((prev) => {
@@ -45,7 +41,6 @@ const ChatWidget = ({ isPartyMode, partyCode, username }) => {
     };
   }, []);
 
-  // 3. Auto Scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -54,11 +49,15 @@ const ChatWidget = ({ isPartyMode, partyCode, username }) => {
     e.preventDefault();
     if (!input.trim()) return;
 
+    // Use passed color if in Party Mode, otherwise Grey for Global
+    const colorToSend = isPartyMode ? myColor : '#94a3b8';
+
     const messageData = {
       room: activeRoom,
       user: username || "Guest",
       text: input,
-      type: "user"
+      type: "user",
+      color: colorToSend // Send color with message
     };
 
     socket.emit('send_message', messageData);
@@ -79,7 +78,10 @@ const ChatWidget = ({ isPartyMode, partyCode, username }) => {
         {messages.map((msg) => (
           <div key={msg.id} className={`text-sm animate-fade-in-up ${msg.type === 'system' ? 'text-blue-400 italic text-center text-[10px] py-2 opacity-70' : 'text-slate-200'}`}>
             {msg.type !== 'system' && (
-              <span className={`font-black uppercase text-[10px] italic mr-2 ${msg.user === username ? 'text-emerald-400' : 'text-blue-500'}`}>
+              <span 
+                className="font-black uppercase text-[10px] italic mr-2"
+                style={{ color: msg.color || '#94a3b8' }} // Use message color or fallback to grey
+              >
                 {msg.user}:
               </span>
             )}
