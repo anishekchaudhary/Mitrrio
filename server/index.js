@@ -5,7 +5,9 @@ const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const authRoute = require('./routes/auth');
-const socketManager = require('./socket/socketManager');
+// const socketManager = require('./socket/socketManager');
+const socketManager = require('./socket');
+
 
 dotenv.config();
 
