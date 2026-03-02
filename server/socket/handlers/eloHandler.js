@@ -1,8 +1,7 @@
 const User = require('../../models/User');
 const { calculateNewRatings } = require('../../utils/elo');
 
-module.exports = (io, socket) => {
-
+const registerEloHandler = (socket, io) => {
   socket.on('game_end', async ({ winnerId, loserId }) => {
     try {
       const winnerDoc = await User.findById(winnerId);
@@ -37,9 +36,8 @@ module.exports = (io, socket) => {
         change: newLoserRating - lElo
       });
 
-    } catch (err) {
-      console.error(err);
-    }
+    } catch (err) { console.error(err); }
   });
-
 };
+
+module.exports = registerEloHandler;
