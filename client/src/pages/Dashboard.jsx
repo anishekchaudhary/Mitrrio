@@ -93,6 +93,11 @@ const Dashboard = () => {
       if (data.members) setMembers(data.members);
     };
 
+    const onGameStart = ({ gameId }) => {
+      console.log("Game Starting! Moving to arena...");
+      navigate(`/game/${gameId}`);
+    };
+
     const onLeftParty = () => {
       setPartyCode("");
       setPartyState("menu");
@@ -114,6 +119,7 @@ const Dashboard = () => {
     socket.on("session_denied", onSessionDenied);
     socket.on("session_replaced", onSessionReplaced);
     socket.on("joined_party", onJoinedParty);
+    socket.on("game_start", onGameStart);
     socket.on("left_party", onLeftParty);
     socket.on("party_error", onPartyError);
     socket.on("party_update", onPartyUpdate);
@@ -123,13 +129,14 @@ const Dashboard = () => {
       socket.off("connect", identifyUser);
       socket.off("session_denied", onSessionDenied);
       socket.off("session_replaced", onSessionReplaced);
+      socket.off("game_start", onGameStart);
       socket.off("joined_party", onJoinedParty);
       socket.off("left_party", onLeftParty);
       socket.off("party_error", onPartyError);
       socket.off("party_update", onPartyUpdate);
       socket.off("elo_update", onEloUpdate);
     };
-  }, [user]);
+  }, [user, navigate]);
 
   // ---------------------------
   // AUTH
