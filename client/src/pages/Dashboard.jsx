@@ -83,7 +83,8 @@ const Dashboard = () => {
         const updatedUser = {
           ...prevUser,
           elo: data.elo,
-          xp: data.xp || prevUser.xp
+          xp: data.xp, // Make sure this is updated
+          gamesPlayed: data.gamesPlayed || prevUser.gamesPlayed + 1 // Ensure this is captured
         };
         localStorage.setItem("user", JSON.stringify(updatedUser));
         return updatedUser;
