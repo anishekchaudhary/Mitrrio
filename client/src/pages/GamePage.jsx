@@ -50,13 +50,27 @@ const GamePage = () => {
       setTimeout(() => setIsRolling(false), 500);
     };
 
+    const onEloUpdate = (data) => {
+      if (String(data.userId) === String(userId)) {
+        const savedUser = JSON.parse(localStorage.getItem('user'));
+        if (savedUser) {
+          savedUser.elo = data.elo;
+          savedUser.xp = data.xp;
+          savedUser.gamesPlayed = data.gamesPlayed;
+          localStorage.setItem('user', JSON.stringify(savedUser));
+        }
+      }
+    };
+
     socket.on('game_update', onGameUpdate);
     socket.on('dice_rolled', onDiceRolled);
+    socket.on('elo_update', onEloUpdate);
 
     return () => {
       socket.off('connect', initGameConnection);
       socket.off('game_update', onGameUpdate);
       socket.off('dice_rolled', onDiceRolled);
+      socket.off('elo_update', onEloUpdate);
     };
   }, [roomCode, userId, navigate, user]);
 
@@ -76,13 +90,11 @@ const GamePage = () => {
 
   const confirmForfeit = () => {
     socket.emit('forfeit_game', { roomCode, userId });
-    socket.emit('leave_party', { user, roomCode }); 
     setShowForfeitModal(false);
     navigate('/');
   };
 
   const handleReturnToLobby = () => {
-    socket.emit('leave_party', { user, roomCode }); 
     navigate('/');
   };
 

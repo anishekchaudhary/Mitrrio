@@ -6,7 +6,7 @@ const GamePanel = ({ username, color, onPlay, onSpectate }) => {
     <div className="flex flex-col items-center justify-center w-full pointer-events-auto p-4">
       
       <h1 className="text-9xl font-black text-white tracking-tighter mb-8 drop-shadow-[0_0_35px_rgba(255,255,255,0.15)] italic select-none text-center">
-        Mitrrio
+        Tug-o-Luck
       </h1>
 
       <div className="bg-slate-900/80 backdrop-blur-xl border-2 border-slate-700 p-8 rounded-3xl shadow-2xl w-full max-w-lg relative z-20 transform transition-transform duration-500">

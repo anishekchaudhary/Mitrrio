@@ -40,7 +40,7 @@ const processMatchmaking = async (io) => {
   while (queue.length >= PLAYERS_PER_MATCH) {
     const matchedPlayers = queue.splice(0, PLAYERS_PER_MATCH);
     const roomCode = `PUB_${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
-    const colors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b'];
+    const colors = ['#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899'];
 
     const members = matchedPlayers.map((player, index) => ({
       id: player.userId,

@@ -9,9 +9,16 @@ const createGame = (roomCode, members) => {
     status: 'playing', 
     turnIndex: 0,
     currentTurnTotal: 0,
-    turnDeadline: Date.now() + TURN_TIME_LIMIT, // SET INITIAL TIMER
+    turnDeadline: Date.now() + TURN_TIME_LIMIT,
     activePlayers: members.map(m => ({
-      id: m.id, username: m.username, color: m.color, score: 0, matchState: 'playing'
+      id: m.id, 
+      username: m.username, 
+      color: m.color, 
+      score: 0, 
+      matchState: 'playing',
+      elo: m.elo || 1200,              
+      xp: m.xp || 0,                   
+      gamesPlayed: m.gamesPlayed || 0  
     })),
     winners: [], losers: [], finished: []
   };
