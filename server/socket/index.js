@@ -2,12 +2,14 @@ const registerIdentifyHandler = require('./handlers/identifyHandler');
 const registerPartyHandler = require('./handlers/partyHandler');
 const registerChatHandler = require('./handlers/chatHandler');
 const registerDisconnectHandler = require('./handlers/disconnectHandler');
-const registerMatchmakingHandler = require('./handlers/matchmakingHandler'); 
+const registerGameHandler = require('./handlers/gameHandler');
+// IMPORT THE MATCHMAKING FILES
+const registerMatchmakingHandler = require('./handlers/matchmakingHandler');
 const { startMatchmakingLoop } = require('./services/matchmakingService');
-const registerGameHandler = require('./handlers/gameHandler'); 
 
 const socketManager = (io) => {
-  startMatchmakingLoop(io); // START THE QUEUE LOOP
+  // 1. IGNITE THE MATCHMAKING LOOP (Runs every 3 seconds)
+  startMatchmakingLoop(io);
 
   io.on('connection', (socket) => {
     console.log(`Socket connected: ${socket.id}`);
@@ -15,9 +17,10 @@ const socketManager = (io) => {
     registerIdentifyHandler(socket, io);
     registerPartyHandler(socket, io);
     registerChatHandler(socket, io);
-    registerMatchmakingHandler(socket, io); // REGISTER NEW HANDLER
     registerDisconnectHandler(socket, io);
-    registerGameHandler(socket, io); 
+    registerGameHandler(socket, io);
+    // 2. REGISTER THE MATCHMAKING LISTENER
+    registerMatchmakingHandler(socket, io); 
   });
 };
 
