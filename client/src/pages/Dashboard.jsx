@@ -186,9 +186,17 @@ const Dashboard = () => {
     if (code) socket.emit('join_private', { code, user });
   };
   const handleLeave = () => socket.emit('leave_party', { user, roomCode: partyCode });
+  
   const handlePlay = () => {
-    if (partyState === 'menu') socket.emit('join_public', user);
-    navigate('/game');
+    if (partyState === 'menu') {
+      setPartyState('searching');
+      socket.emit('find_match', user);
+    }
+  };
+  
+  const handleCancelSearch = () => {
+    setPartyState('menu');
+    socket.emit('cancel_match', user);
   };
 
   const handleCloseTab = () => { window.location.href = "about:blank"; };
@@ -203,6 +211,20 @@ const Dashboard = () => {
         style={{ backgroundImage: "url('/Background.png')", opacity: 0.7 }}
       ></div>
       <div className="absolute inset-0 z-0 bg-gradient-to-t from-slate-950 via-slate-900/60 to-transparent"></div>
+
+      {/* SEARCHING OVERLAY */}
+      {partyState === 'searching' && (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/80 backdrop-blur-md">
+          <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-6"></div>
+          <h2 className="text-3xl font-black text-white mb-8 tracking-widest uppercase">Searching for Opponents...</h2>
+          <button 
+            onClick={handleCancelSearch} 
+            className="px-8 py-3 bg-red-500/10 text-red-500 font-bold tracking-widest uppercase rounded-xl border border-red-500/50 hover:bg-red-500 hover:text-white transition-all active:scale-95"
+          >
+            Cancel Search
+          </button>
+        </div>
+      )}
 
       <AuthModal
         isOpen={showAuthModal}
