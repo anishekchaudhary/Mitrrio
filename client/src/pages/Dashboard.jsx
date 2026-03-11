@@ -7,6 +7,7 @@ import PartyWidget from '../components/PartyWidget';
 import GamePanel from '../components/GamePanel';
 import AuthModal from '../components/AuthModal';
 import SessionReplaceModal from '../components/SessionReplaceModal';
+import { Eye, X } from 'lucide-react'; // <-- Imported extra icons
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -14,6 +15,10 @@ const Dashboard = () => {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState('signin');
   const [showSessionModal, setShowSessionModal] = useState(false);
+
+  // --- NEW: Spectate Modal State ---
+  const [showSpectateModal, setShowSpectateModal] = useState(false);
+  const [spectateCodeInput, setSpectateCodeInput] = useState("");
 
   const [partyState, setPartyState] = useState('menu');
   const [members, setMembers] = useState([]); 
@@ -23,39 +28,24 @@ const Dashboard = () => {
   const [maxSize, setMaxSize] = useState(10);
   const [myColor, setMyColor] = useState("#94a3b8");
 
-  // ---------------------------
-  // USER INITIALIZATION
-  // ---------------------------
   const [user, setUser] = useState(() => {
     const savedUser = localStorage.getItem('user');
     const token = localStorage.getItem('token');
 
     if (savedUser && savedUser !== "undefined") {
       const parsed = JSON.parse(savedUser);
-      return {
-        ...parsed,
-        name: parsed.username,
-        isLoggedIn: !!token
-      };
+      return { ...parsed, name: parsed.username, isLoggedIn: !!token };
     }
 
     const gid = Math.floor(1000 + Math.random() * 9000);
     const guestUser = {
-      name: `Guest_${gid}`,
-      username: `Guest_${gid}`,
-      id: `guest_${gid}`,
-      isLoggedIn: false,
-      elo: 1000,
-      xp: 0
+      name: `Guest_${gid}`, username: `Guest_${gid}`, id: `guest_${gid}`, isLoggedIn: false, elo: 1000, xp: 0
     };
 
     localStorage.setItem('user', JSON.stringify(guestUser));
     return guestUser;
   });
 
-  // ---------------------------
-  // SOCKET CONNECTION
-  // ---------------------------
   useEffect(() => {
     if (!socket.connected) socket.connect();
 
@@ -63,42 +53,22 @@ const Dashboard = () => {
       const userId = user.id || user._id;
       if (userId) {
         socket.emit("identify", userId);
-        // NEW: Request state sync immediately
         socket.emit("sync_party_state", user); 
       }
     };
 
     socket.on("connect", identifyUser);
-
-    // If socket was already connected when component mounted (navigation)
-    if (socket.connected) {
-        identifyUser();
-    }
+    if (socket.connected) identifyUser();
 
     const onSessionReplaced = () => setShowSessionModal(true);
     const onSessionDenied = () => setShowSessionModal(true);
 
     const onEloUpdate = (data) => {
-        console.log("%c[Dashboard] Received elo_update:", "color: lime; font-weight: bold;", data); // LOG A
-
         setUser((prevUser) => {
             const currentUserId = prevUser.id || prevUser._id;
-            console.log(`[Dashboard] Checking ID match: Received(${data.userId}) vs Current(${currentUserId})`); // LOG B
+            if (String(data.userId) !== String(currentUserId)) return prevUser;
 
-            // Normalize IDs to strings for safe comparison
-            if (String(data.userId) !== String(currentUserId)) {
-                console.log("[Dashboard] ID Mismatch - Ignoring update.");
-                return prevUser;
-            }
-
-            const updatedUser = {
-            ...prevUser,
-            elo: data.elo,
-            xp: data.xp,
-            gamesPlayed: data.gamesPlayed
-            };
-
-            console.log("[Dashboard] State Updated to:", updatedUser); // LOG C
+            const updatedUser = { ...prevUser, elo: data.elo, xp: data.xp, gamesPlayed: data.gamesPlayed };
             localStorage.setItem("user", JSON.stringify(updatedUser));
             return updatedUser;
         });
@@ -111,16 +81,10 @@ const Dashboard = () => {
       setMaxSize(data.maxSize || 10);
       setPartyError("");
       if (data.myColor) setMyColor(data.myColor);
-      
-      // Ensure we use the members list from the server, 
-      // which will now have isReady: false
       if (data.members) setMembers(data.members);
     };
 
-    const onGameStart = ({ gameId }) => {
-      console.log("Game Starting! Moving to arena...");
-      navigate(`/game/${gameId}`);
-    };
+    const onGameStart = ({ gameId }) => navigate(`/game/${gameId}`);
 
     const onLeftParty = () => {
       setPartyCode("");
@@ -131,13 +95,10 @@ const Dashboard = () => {
     };
 
     const onPartyError = (err) => setPartyError(err);
-
     const onPartyUpdate = (data) => {
       setMemberCount(data.memberCount);
       setMaxSize(data.maxSize);
-      if (data.members) {
-        setMembers(data.members); 
-      }
+      if (data.members) setMembers(data.members); 
     };
 
     socket.on("elo_update", onEloUpdate);
@@ -162,9 +123,6 @@ const Dashboard = () => {
     };
   }, [user, navigate]);
 
-  // ---------------------------
-  // AUTH
-  // ---------------------------
   const handleLogout = () => {
     localStorage.clear();
     window.location.reload();
@@ -177,9 +135,6 @@ const Dashboard = () => {
     socket.emit('identify', userData._id);
   };
 
-  // ---------------------------
-  // PARTY ACTIONS
-  // ---------------------------
   const handleCreate = () => socket.emit('create_party', user);
   const handleJoin = (code) => {
     setPartyError("");
@@ -188,9 +143,30 @@ const Dashboard = () => {
   const handleLeave = () => socket.emit('leave_party', { user, roomCode: partyCode });
   
   const handlePlay = () => {
-    if (partyState === 'menu') {
+    if (partyState === 'active') {
+       socket.emit('toggle_ready', { roomCode: partyCode, user });
+    } else if (partyState === 'menu') {
       setPartyState('searching');
       socket.emit('find_match', user);
+    }
+  };
+
+  // --- UPDATED: Spectator Handler ---
+  const handleSpectate = () => {
+    if (partyState === 'active') {
+       socket.emit('set_spectator', { userId: user.id || user._id, roomCode: partyCode });
+    } else {
+       // Open the custom modal instead of window.prompt
+       setSpectateCodeInput("");
+       setShowSpectateModal(true);
+    }
+  };
+
+  const submitSpectateCode = (e) => {
+    e.preventDefault();
+    if (spectateCodeInput.trim()) {
+      setShowSpectateModal(false);
+      navigate(`/game/${spectateCodeInput.trim().toUpperCase()}`);
     }
   };
   
@@ -201,89 +177,98 @@ const Dashboard = () => {
 
   const handleCloseTab = () => { window.location.href = "about:blank"; };
 
+  const myMemberData = members.find(m => m.id === (user.id || user._id));
+  const isReady = myMemberData?.isReady || false;
+  const isSpectator = myMemberData?.isSpectator || false;
+
   return (
     <div className="relative w-full h-screen bg-slate-950 font-sans text-slate-200 overflow-hidden">
       <SessionReplaceModal isOpen={showSessionModal} onCloseTab={handleCloseTab} />
 
-      {/* BACKGROUND */}
-      <div 
-        className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000"
-        style={{ backgroundImage: "url('/Background.png')", opacity: 0.9 }}
-      ></div>
+      {/* --- NEW: CUSTOM SPECTATE MODAL --- */}
+      {showSpectateModal && (
+        <div className="absolute inset-0 z-[60] flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-in fade-in zoom-in duration-200">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl p-8 max-w-sm w-full shadow-2xl relative">
+            
+            <button 
+              onClick={() => setShowSpectateModal(false)}
+              className="absolute top-4 right-4 text-slate-500 hover:text-white transition-colors"
+            >
+              <X size={24} />
+            </button>
+
+            <div className="flex flex-col items-center text-center mb-6">
+              <div className="w-16 h-16 bg-cyan-500/10 border border-cyan-500/30 rounded-full flex items-center justify-center mb-4">
+                <Eye size={32} className="text-cyan-400" />
+              </div>
+              <h3 className="text-2xl font-black text-white uppercase tracking-widest">Spectate Arena</h3>
+              <p className="text-sm font-medium text-slate-400 mt-2">Enter an active lobby code to drop in and watch the match.</p>
+            </div>
+
+            <form onSubmit={submitSpectateCode} className="flex flex-col gap-4">
+              <input 
+                type="text" 
+                placeholder="e.g., PUB_X7K9" 
+                value={spectateCodeInput}
+                onChange={(e) => setSpectateCodeInput(e.target.value.toUpperCase())}
+                autoFocus
+                className="w-full bg-slate-950 border-2 border-slate-700 focus:border-cyan-500 text-white font-black text-center text-xl tracking-widest uppercase rounded-2xl py-4 outline-none transition-colors"
+              />
+              <button 
+                type="submit"
+                disabled={!spectateCodeInput.trim()}
+                className="w-full py-4 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 disabled:text-slate-500 text-white rounded-2xl font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-cyan-500/20"
+              >
+                Join as Spectator
+              </button>
+            </form>
+
+          </div>
+        </div>
+      )}
+      {/* --------------------------------- */}
+
+      <div className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000" style={{ backgroundImage: "url('/Background.png')", opacity: 0.9 }}></div>
       <div className="absolute inset-0 z-0 bg-gradient-to-t from-slate-950 via-slate-900/60 to-transparent"></div>
 
-      {/* SEARCHING OVERLAY */}
       {partyState === 'searching' && (
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/80 backdrop-blur-md">
           <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-6"></div>
           <h2 className="text-3xl font-black text-white mb-8 tracking-widest uppercase">Searching for Opponents...</h2>
-          <button 
-            onClick={handleCancelSearch} 
-            className="px-8 py-3 bg-red-500/10 text-red-500 font-bold tracking-widest uppercase rounded-xl border border-red-500/50 hover:bg-red-500 hover:text-white transition-all active:scale-95"
-          >
-            Cancel Search
-          </button>
+          <button onClick={handleCancelSearch} className="px-8 py-3 bg-red-500/10 text-red-500 font-bold tracking-widest uppercase rounded-xl border border-red-500/50 hover:bg-red-500 hover:text-white transition-all active:scale-95">Cancel Search</button>
         </div>
       )}
 
-      <AuthModal
-        isOpen={showAuthModal}
-        initialMode={authMode}
-        onClose={() => setShowAuthModal(false)}
-        onLogin={handleAuthSuccess}
-        guestData={user}
-      />
+      <AuthModal isOpen={showAuthModal} initialMode={authMode} onClose={() => setShowAuthModal(false)} onLogin={handleAuthSuccess} guestData={user} />
 
       <div className="relative z-10 w-full h-full md:overflow-hidden flex flex-col md:block p-4 md:p-0">
         
-        {/* PROFILE WIDGET (TOP RIGHT) */}
         <div className="order-1 md:fixed md:top-6 md:right-6 md:z-30 w-full md:w-96 mb-4 md:mb-0 h-48 md:h-auto">
-          <ProfileWidget
-            user={user}
-            onLogout={handleLogout}
-            onNavigate={(m) => { setAuthMode(m); setShowAuthModal(true); }}
-          />
+          <ProfileWidget user={user} onLogout={handleLogout} onNavigate={(m) => { setAuthMode(m); setShowAuthModal(true); }} />
         </div>
 
-        {/* GAME PANEL (CENTER) */}
         <div className="order-2 md:fixed md:inset-0 md:z-10 md:pointer-events-none flex items-center justify-center py-4 md:py-0">
           <GamePanel
             username={user.username || user.name}
             color={myColor}
             onPlay={handlePlay}
-            onSpectate={() => navigate('/spectate')}
+            onSpectate={handleSpectate}
+            inParty={partyState === 'active'}
+            isReady={isReady}
+            isSpectator={isSpectator}
           />
         </div>
 
-        {/* PARTY WIDGET (BOTTOM RIGHT) */}
         <div className="order-3 md:fixed md:bottom-6 md:right-6 md:z-30 w-full md:w-96 mt-4 md:mt-0 h-64 md:h-auto">
           <PartyWidget
-            partyState={partyState}
-            partyCode={partyCode}
-            setPartyState={setPartyState}
-            onCreateParty={handleCreate}
-            onJoinPrivate={handleJoin}
-            onLeaveParty={handleLeave}
-            
-            // Step 1 Logic Props
-            members={members}
-            currentUser={user}
-            onToggleReady={() => socket.emit('toggle_ready', { roomCode: partyCode, user })}
-            
-            memberCount={memberCount}
-            maxSize={maxSize}
-            error={partyError}
+            partyState={partyState} partyCode={partyCode} setPartyState={setPartyState} onCreateParty={handleCreate} onJoinPrivate={handleJoin} onLeaveParty={handleLeave}
+            members={members} currentUser={user} onToggleReady={() => socket.emit('toggle_ready', { roomCode: partyCode, user })}
+            memberCount={memberCount} maxSize={maxSize} error={partyError}
           />
         </div>
 
-        {/* CHAT WIDGET (LEFT SIDE) */}
         <div className="order-4 md:fixed md:top-6 md:bottom-6 md:left-6 w-full md:w-96 md:z-20 mt-4 md:mt-0 h-64 md:h-auto">
-          <ChatWidget
-            isPartyMode={partyState === 'active'}
-            partyCode={partyCode}
-            username={user.username || user.name}
-            myColor={myColor}
-          />
+          <ChatWidget isPartyMode={partyState === 'active'} partyCode={partyCode} username={user.username || user.name} myColor={myColor} />
         </div>
       </div>
     </div>

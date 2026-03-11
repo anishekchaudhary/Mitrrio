@@ -12,7 +12,7 @@ const GamePage = () => {
   const [diceRoll, setDiceRoll] = useState(null);
   const [isRolling, setIsRolling] = useState(false);
   const [timeLeft, setTimeLeft] = useState(30);
-  const [showForfeitModal, setShowForfeitModal] = useState(false);
+  const [showExitModal, setShowExitModal] = useState(false); // Renamed for clarity
 
   const [user] = useState(() => {
     const savedUser = localStorage.getItem('user');
@@ -50,27 +50,13 @@ const GamePage = () => {
       setTimeout(() => setIsRolling(false), 500);
     };
 
-    const onEloUpdate = (data) => {
-      if (String(data.userId) === String(userId)) {
-        const savedUser = JSON.parse(localStorage.getItem('user'));
-        if (savedUser) {
-          savedUser.elo = data.elo;
-          savedUser.xp = data.xp;
-          savedUser.gamesPlayed = data.gamesPlayed;
-          localStorage.setItem('user', JSON.stringify(savedUser));
-        }
-      }
-    };
-
     socket.on('game_update', onGameUpdate);
     socket.on('dice_rolled', onDiceRolled);
-    socket.on('elo_update', onEloUpdate);
 
     return () => {
       socket.off('connect', initGameConnection);
       socket.off('game_update', onGameUpdate);
       socket.off('dice_rolled', onDiceRolled);
-      socket.off('elo_update', onEloUpdate);
     };
   }, [roomCode, userId, navigate, user]);
 
@@ -90,8 +76,13 @@ const GamePage = () => {
 
   const confirmForfeit = () => {
     socket.emit('forfeit_game', { roomCode, userId });
-    setShowForfeitModal(false);
+    setShowExitModal(false);
     navigate('/');
+  };
+
+  const confirmSpectatorExit = () => {
+    setShowExitModal(false);
+    navigate('/'); // Simply navigating away removes them from the game view safely
   };
 
   const handleReturnToLobby = () => {
@@ -116,21 +107,36 @@ const GamePage = () => {
       <div className="absolute inset-0 z-0 bg-cover bg-center opacity-40" style={{ backgroundImage: "url('/Background.png')" }}></div>
       <div className="absolute inset-0 z-0 bg-gradient-to-br from-slate-950 via-slate-900/80 to-slate-950"></div>
 
-      {showForfeitModal && (
+      {/* DYNAMIC MODAL (FORFEIT OR EXIT) */}
+      {showExitModal && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/90 backdrop-blur-md p-4 animate-in fade-in zoom-in duration-200">
           <div className="bg-slate-900 border border-slate-700 rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl">
-            <AlertTriangle className="text-red-500 mx-auto mb-4" size={56} />
-            <h3 className="text-2xl font-black text-white uppercase tracking-widest mb-2">Forfeit Match?</h3>
-            <p className="text-slate-400 mb-8 font-medium">You will automatically drop to -50 points and suffer an Elo penalty.</p>
-            <div className="flex gap-4">
-              <button onClick={() => setShowForfeitModal(false)} className="flex-1 py-3 rounded-xl font-bold bg-slate-800 text-white hover:bg-slate-700 transition-all">Cancel</button>
-              <button onClick={confirmForfeit} className="flex-1 py-3 rounded-xl font-bold bg-red-600 text-white hover:bg-red-500 transition-all">Yes, Forfeit</button>
-            </div>
+            {isSpectator ? (
+              <>
+                <LogOut className="text-slate-400 mx-auto mb-4" size={56} />
+                <h3 className="text-2xl font-black text-white uppercase tracking-widest mb-2">Leave Arena?</h3>
+                <p className="text-slate-400 mb-8 font-medium">You will stop spectating this match and return to the dashboard.</p>
+                <div className="flex gap-4">
+                  <button onClick={() => setShowExitModal(false)} className="flex-1 py-3 rounded-xl font-bold bg-slate-800 text-white hover:bg-slate-700 transition-all">Cancel</button>
+                  <button onClick={confirmSpectatorExit} className="flex-1 py-3 rounded-xl font-bold bg-slate-600 text-white hover:bg-slate-500 transition-all">Yes, Leave</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <AlertTriangle className="text-red-500 mx-auto mb-4" size={56} />
+                <h3 className="text-2xl font-black text-white uppercase tracking-widest mb-2">Forfeit Match?</h3>
+                <p className="text-slate-400 mb-8 font-medium">You will automatically drop to -50 points and suffer an Elo penalty.</p>
+                <div className="flex gap-4">
+                  <button onClick={() => setShowExitModal(false)} className="flex-1 py-3 rounded-xl font-bold bg-slate-800 text-white hover:bg-slate-700 transition-all">Cancel</button>
+                  <button onClick={confirmForfeit} className="flex-1 py-3 rounded-xl font-bold bg-red-600 text-white hover:bg-red-500 transition-all">Yes, Forfeit</button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
 
-      {/* CHAT WIDGET - EXACT SAME COORDINATES AS DASHBOARD */}
+      {/* CHAT WIDGET */}
       <div className="order-4 hidden md:block md:fixed md:top-6 md:bottom-6 md:left-6 md:w-96 md:z-20">
         <ChatWidget
           isPartyMode={true}
@@ -141,22 +147,26 @@ const GamePage = () => {
       </div>
 
       <div className="relative z-10 flex items-center justify-between p-6 bg-slate-900/50 border-b border-slate-800 backdrop-blur-md">
-        {/* ADDED PROPER SPACING: ml-[440px] gives an extra 32px of space away from the chat widget */}
         <div className="md:ml-[440px]"> 
           <h1 className="text-2xl font-black text-white uppercase tracking-widest flex items-center gap-3">
             <Trophy className="text-indigo-400" /> Arena: {roomCode}
           </h1>
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">Circular Tug-of-War</p>
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">Tug-o-Luck</p>
         </div>
+        
+        {/* DYNAMIC HEADER BUTTON */}
         <button 
-          onClick={() => setShowForfeitModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-500 border border-red-500/30 hover:bg-red-500 hover:text-white rounded-lg font-bold transition-all"
+          onClick={() => setShowExitModal(true)}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition-all ${
+            isSpectator 
+              ? 'bg-slate-500/10 text-slate-400 border border-slate-500/30 hover:bg-slate-500 hover:text-white'
+              : 'bg-red-500/10 text-red-500 border border-red-500/30 hover:bg-red-500 hover:text-white'
+          }`}
         >
-          <LogOut size={16} /> Forfeit
+          <LogOut size={16} /> {isSpectator ? 'Exit' : 'Forfeit'}
         </button>
       </div>
 
-      {/* PUSH CONTENT TO THE RIGHT WITH matching pl-[440px] to keep everything aligned perfectly */}
       <div className="relative z-10 flex-1 flex flex-col md:flex-row p-6 gap-6 w-full md:pl-[440px] max-w-[100rem] mx-auto">
         
         {/* COMBATANTS LIST */}

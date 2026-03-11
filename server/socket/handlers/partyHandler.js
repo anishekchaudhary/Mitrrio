@@ -25,8 +25,6 @@ const registerPartyHandler = (socket, io) => {
         text: "Match start canceled.",
         type: "system"
       });
-      
-      io.to(partyCode).emit('countdown_canceled');
     }
   };
 
@@ -51,12 +49,9 @@ const registerPartyHandler = (socket, io) => {
       } else {
         countdownTimers.delete(partyCode);
         
-        // Fetch latest party state to get accurate member list
         const party = await Party.findOne({ code: partyCode });
         if (party) {
-            // Initialize Game Session in Memory
             createGame(partyCode, party.members);
-            // Trigger Navigation for all clients
             io.to(partyCode).emit('game_start', { gameId: partyCode });
         }
       }
@@ -65,11 +60,9 @@ const registerPartyHandler = (socket, io) => {
     runTimer();
   };
 
-  // --- HELPER: Resolve User/Guest Stats ---
   const getUserStats = async (userData) => {
     const userId = userData._id || userData.id;
     
-    // If Guest: Use provided local data
     if (userId.toString().startsWith('guest')) {
       return {
         elo: userData.elo || 1200,
@@ -78,19 +71,14 @@ const registerPartyHandler = (socket, io) => {
       };
     }
 
-    // If Registered: Fetch from DB (Source of Truth)
     const user = await User.findById(userId);
     if (user) {
-      return {
-        elo: user.elo,
-        xp: user.xp,
-        gamesPlayed: user.gamesPlayed
-      };
+      return { elo: user.elo, xp: user.xp, gamesPlayed: user.gamesPlayed };
     }
     return { elo: 1200, xp: 0, gamesPlayed: 0 };
   };
 
-  // --- 1. SYNC PARTY STATE (Re-entry logic) ---
+  // --- 1. SYNC PARTY STATE ---
   socket.on('sync_party_state', async (userData) => {
     try {
       const userId = userData._id || userData.id;
@@ -106,11 +94,8 @@ const registerPartyHandler = (socket, io) => {
           myColor: party.members.find(m => m.id === userId)?.color,
           members: party.members
         });
-        console.log(`[Sync] Restored user ${userId} to party ${party.code}`);
       }
-    } catch (err) {
-      console.error("Sync Error:", err);
-    }
+    } catch (err) { console.error("Sync Error:", err); }
   });
 
   // --- 2. JOIN PUBLIC LOBBY ---
@@ -130,11 +115,7 @@ const registerPartyHandler = (socket, io) => {
       const myColor = getUniqueColor(party.members);
 
       party.members.push({ 
-        id: userId, 
-        username: userData.username, 
-        color: myColor,
-        isReady: false,
-        ...stats 
+        id: userId, username: userData.username, color: myColor, isReady: false, isSpectator: false, ...stats 
       });
       await party.save();
 
@@ -142,22 +123,11 @@ const registerPartyHandler = (socket, io) => {
       socket.join(party.code);
 
       socket.emit('joined_party', {
-        roomName: party.code,
-        isPublic: true,
-        memberCount: party.members.length,
-        maxSize: party.maxSize,
-        myColor,
-        members: party.members
+        roomName: party.code, isPublic: true, memberCount: party.members.length, maxSize: party.maxSize, myColor, members: party.members
       });
 
       broadcastPartyUpdate(party.code, io);
-      io.to(party.code).emit('receive_message', {
-        room: party.code,
-        user: "System",
-        text: `${userData.username} joined!`,
-        type: "system"
-      });
-
+      io.to(party.code).emit('receive_message', { room: party.code, user: "System", text: `${userData.username} joined!`, type: "system" });
     } catch (err) { console.error(err); }
   });
 
@@ -169,37 +139,18 @@ const registerPartyHandler = (socket, io) => {
 
       const code = Math.random().toString(36).substring(2, 8).toUpperCase();
       const stats = await getUserStats(userData);
+      const myColor = getUniqueColor([]); // Get first safe color
       
       const newParty = new Party({
-        code,
-        type: 'private',
-        maxSize: 10,
-        members: [{
-          id: userId,
-          username: userData.username,
-          isLeader: true,
-          color: '#ef4444', 
-          isReady: false,
-          ...stats
-        }]
+        code, type: 'private', maxSize: 10,
+        members: [{ id: userId, username: userData.username, isLeader: true, color: myColor, isReady: false, isSpectator: false, ...stats }]
       });
 
       await newParty.save();
       socket.join(code);
       
-      socket.emit('joined_party', {
-        roomName: code,
-        isPublic: false,
-        memberCount: 1,
-        maxSize: 10,
-        myColor: '#ef4444',
-        members: newParty.members
-      });
-      
-    } catch (err) {
-      console.error(err);
-      socket.emit('party_error', 'Failed to create party');
-    }
+      socket.emit('joined_party', { roomName: code, isPublic: false, memberCount: 1, maxSize: 10, myColor, members: newParty.members });
+    } catch (err) { socket.emit('party_error', 'Failed to create party'); }
   });
 
   // --- 4. JOIN PRIVATE PARTY ---
@@ -212,40 +163,22 @@ const registerPartyHandler = (socket, io) => {
       if (!party) return socket.emit('party_error', 'Party not found');
       if (party.members.length >= party.maxSize) return socket.emit('party_error', 'Party is full');
 
-      const colors = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
-      const randomColor = colors[party.members.length % colors.length];
+      const myColor = getUniqueColor(party.members); // Use safe colors
       const stats = await getUserStats(user);
 
       party.members.push({
-        id: userId,
-        username: user.username,
-        isLeader: false,
-        color: randomColor,
-        isReady: false,
-        ...stats
+        id: userId, username: user.username, isLeader: false, color: myColor, isReady: false, isSpectator: false, ...stats
       });
 
       await party.save();
       socket.join(code);
 
-      socket.emit('joined_party', {
-        roomName: code,
-        isPublic: false,
-        memberCount: party.members.length,
-        maxSize: party.maxSize,
-        myColor: randomColor,
-        members: party.members
-      });
-
+      socket.emit('joined_party', { roomName: code, isPublic: false, memberCount: party.members.length, maxSize: party.maxSize, myColor, members: party.members });
       broadcastPartyUpdate(code, io);
-
-    } catch (err) {
-      console.error(err);
-      socket.emit('party_error', 'Failed to join party');
-    }
+    } catch (err) { socket.emit('party_error', 'Failed to join party'); }
   });
 
-  // --- 5. TOGGLE READY ---
+  // --- 5. TOGGLE READY / SPECTATOR ---
   socket.on('toggle_ready', async ({ roomCode, user }) => {
     try {
       const userId = user._id || user.id;
@@ -254,24 +187,51 @@ const registerPartyHandler = (socket, io) => {
       
       const member = party.members.find(m => m.id === userId);
       if (member) {
-        // Toggle the status in the DB
         member.isReady = !member.isReady;
-        await party.save();
+        if (!member.isReady) member.isSpectator = false; // Un-readying removes spectator
         
-        // Broadcast the update so all clients see the new state
+        party.markModified('members');
+        await party.save();
         await broadcastPartyUpdate(roomCode, io);
         
-        // Check if everyone is ready to start the game
+        // CHECK CONDITIONS
+        const activePlayers = party.members.filter(m => !m.isSpectator);
         const allReady = party.members.length > 0 && party.members.every(m => m.isReady);
-        if (allReady) {
+        
+        if (allReady && activePlayers.length >= 2) {
           startCountdown(roomCode);
         } else {
           cancelCountdown(roomCode);
         }
       }
-    } catch (err) { 
-      console.error("Ready Toggle Error:", err); 
-    }
+    } catch (err) { console.error(err); }
+  });
+
+  socket.on('set_spectator', async ({ roomCode, userId }) => {
+    try {
+      const party = await Party.findOne({ code: roomCode });
+      if (!party) return;
+
+      const member = party.members.find(m => m.id === userId);
+      if (member) {
+        member.isSpectator = true;
+        member.isReady = true; // Spectators are auto-ready
+        
+        party.markModified('members');
+        await party.save();
+        await broadcastPartyUpdate(roomCode, io);
+        
+        // CHECK CONDITIONS
+        const activePlayers = party.members.filter(m => !m.isSpectator);
+        const allReady = party.members.length > 0 && party.members.every(m => m.isReady);
+        
+        if (allReady && activePlayers.length >= 2) {
+          startCountdown(roomCode);
+        } else {
+          cancelCountdown(roomCode);
+        }
+      }
+    } catch (err) { console.error(err); }
   });
   
   // --- 6. LEAVE PARTY ---
@@ -279,7 +239,6 @@ const registerPartyHandler = (socket, io) => {
       cancelCountdown(roomCode);
       const userId = userData?._id || userData?.id;
       
-      // Clear reconnection timers
       const pendingRemovals = require('../state/pendingRemovals');
       if (userId && pendingRemovals.has(userId)) {
         clearTimeout(pendingRemovals.get(userId));

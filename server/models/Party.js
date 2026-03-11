@@ -10,9 +10,12 @@ const PartySchema = new mongoose.Schema({
     username: String, 
     isLeader: { type: Boolean, default: false },
     color: { type: String, default: '#94a3b8' },
-    // ADD THIS FIELD
     isReady: { type: Boolean, default: false }, 
-    // Add these for guest persistence as previously discussed
+    
+    // --- NEW: Spectator Mode ---
+    isSpectator: { type: Boolean, default: false },
+    
+    // Persistent stats for guests & quick fetching
     elo: { type: Number, default: 1200 },
     xp: { type: Number, default: 0 },
     gamesPlayed: { type: Number, default: 0 }
