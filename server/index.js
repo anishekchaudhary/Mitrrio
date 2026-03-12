@@ -5,9 +5,8 @@ const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const authRoute = require('./routes/auth');
-// const socketManager = require('./socket/socketManager');
+const adminRoute = require('./routes/admin'); // <-- NEW IMPORT
 const socketManager = require('./socket');
-
 
 dotenv.config();
 
@@ -30,7 +29,9 @@ mongoose.connect(process.env.MONGO_URL)
 // Init Socket Logic
 socketManager(io);
 
+// REST API Routes
 app.use("/api/auth", authRoute);
+app.use("/api/admin", adminRoute); // <-- NEW ROUTE MOUNT
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {

@@ -7,7 +7,7 @@ const GamePanel = ({ username, color, onPlay, onSpectate, inParty, isReady, isSp
       
       <div className="mb-8 text-center w-full pb-6 border-b border-slate-700/50">
         <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400 tracking-widest uppercase flex items-center justify-center gap-3 drop-shadow-lg">
-          <Swords size={28} className="text-indigo-400" /> Tug-o-Luck
+          <Swords size={28} className="text-indigo-400" /> Mitrrio
         </h1>
       </div>
 
