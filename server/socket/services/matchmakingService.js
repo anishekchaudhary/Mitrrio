@@ -4,16 +4,16 @@ const Party = require('../../models/Party');
 const queue = [];
 
 const joinQueue = (user, socket, io) => {
-  // Remove if already in queue to prevent duplicates
   leaveQueue(user._id || user.id);
   
   queue.push({
     userId: user._id || user.id,
     socket,
     username: user.username,
-    elo: user.elo || 1200,
-    xp: user.xp || 0,
-    gamesPlayed: user.gamesPlayed || 0,
+    // Use ?? instead of || to prevent 0 from being wiped out
+    elo: user.elo ?? 1200, 
+    xp: user.xp ?? 0,
+    gamesPlayed: user.gamesPlayed ?? 0,
     joinedAt: Date.now()
   });
 };
@@ -29,13 +29,11 @@ const leaveQueueBySocket = (socketId) => {
 };
 
 const processMatchmaking = async (io) => {
-  // Need at least 2 players to start a match
   if (queue.length < 2) return; 
 
-  // Sort by Elo for SBMM
   queue.sort((a, b) => a.elo - b.elo);
 
-  const PLAYERS_PER_MATCH = 2; // For testing. Change to 4 later.
+  const PLAYERS_PER_MATCH = 2; 
 
   while (queue.length >= PLAYERS_PER_MATCH) {
     const matchedPlayers = queue.splice(0, PLAYERS_PER_MATCH);
@@ -46,7 +44,7 @@ const processMatchmaking = async (io) => {
       id: player.userId,
       username: player.username,
       color: colors[index],
-      isReady: true, // Auto-ready for public matches
+      isReady: true, 
       elo: player.elo,
       xp: player.xp,
       gamesPlayed: player.gamesPlayed
@@ -63,7 +61,6 @@ const processMatchmaking = async (io) => {
 
       createGame(roomCode, members);
 
-      // Notify matched players and trigger their frontend navigation
       matchedPlayers.forEach(player => {
         player.socket.join(roomCode);
         player.socket.emit('joined_party', {
@@ -72,7 +69,8 @@ const processMatchmaking = async (io) => {
           memberCount: members.length,
           maxSize: PLAYERS_PER_MATCH,
           myColor: player.color,
-          members
+          members,
+          isGameRunning: true // Game is instantly running for public matches
         });
         player.socket.emit('game_start', { gameId: roomCode });
       });

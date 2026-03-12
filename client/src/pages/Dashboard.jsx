@@ -7,7 +7,7 @@ import PartyWidget from '../components/PartyWidget';
 import GamePanel from '../components/GamePanel';
 import AuthModal from '../components/AuthModal';
 import SessionReplaceModal from '../components/SessionReplaceModal';
-import { Eye, X } from 'lucide-react'; // <-- Imported extra icons
+import { Eye, X } from 'lucide-react';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -16,7 +16,6 @@ const Dashboard = () => {
   const [authMode, setAuthMode] = useState('signin');
   const [showSessionModal, setShowSessionModal] = useState(false);
 
-  // --- NEW: Spectate Modal State ---
   const [showSpectateModal, setShowSpectateModal] = useState(false);
   const [spectateCodeInput, setSpectateCodeInput] = useState("");
 
@@ -27,6 +26,8 @@ const Dashboard = () => {
   const [memberCount, setMemberCount] = useState(1);
   const [maxSize, setMaxSize] = useState(10);
   const [myColor, setMyColor] = useState("#94a3b8");
+  
+  const [isGameRunning, setIsGameRunning] = useState(false);
 
   const [user, setUser] = useState(() => {
     const savedUser = localStorage.getItem('user');
@@ -82,6 +83,7 @@ const Dashboard = () => {
       setPartyError("");
       if (data.myColor) setMyColor(data.myColor);
       if (data.members) setMembers(data.members);
+      setIsGameRunning(data.isGameRunning || false);
     };
 
     const onGameStart = ({ gameId }) => navigate(`/game/${gameId}`);
@@ -92,6 +94,7 @@ const Dashboard = () => {
       setMembers([]);
       setMemberCount(1);
       setMyColor("#94a3b8");
+      setIsGameRunning(false);
     };
 
     const onPartyError = (err) => setPartyError(err);
@@ -99,6 +102,7 @@ const Dashboard = () => {
       setMemberCount(data.memberCount);
       setMaxSize(data.maxSize);
       if (data.members) setMembers(data.members); 
+      if (data.isGameRunning !== undefined) setIsGameRunning(data.isGameRunning);
     };
 
     socket.on("elo_update", onEloUpdate);
@@ -151,12 +155,10 @@ const Dashboard = () => {
     }
   };
 
-  // --- UPDATED: Spectator Handler ---
   const handleSpectate = () => {
     if (partyState === 'active') {
        socket.emit('set_spectator', { userId: user.id || user._id, roomCode: partyCode });
     } else {
-       // Open the custom modal instead of window.prompt
        setSpectateCodeInput("");
        setShowSpectateModal(true);
     }
@@ -185,7 +187,6 @@ const Dashboard = () => {
     <div className="relative w-full h-screen bg-slate-950 font-sans text-slate-200 overflow-hidden">
       <SessionReplaceModal isOpen={showSessionModal} onCloseTab={handleCloseTab} />
 
-      {/* --- NEW: CUSTOM SPECTATE MODAL --- */}
       {showSpectateModal && (
         <div className="absolute inset-0 z-[60] flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-in fade-in zoom-in duration-200">
           <div className="bg-slate-900 border border-slate-700 rounded-3xl p-8 max-w-sm w-full shadow-2xl relative">
@@ -222,11 +223,9 @@ const Dashboard = () => {
                 Join as Spectator
               </button>
             </form>
-
           </div>
         </div>
       )}
-      {/* --------------------------------- */}
 
       <div className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000" style={{ backgroundImage: "url('/Background.png')", opacity: 0.9 }}></div>
       <div className="absolute inset-0 z-0 bg-gradient-to-t from-slate-950 via-slate-900/60 to-transparent"></div>
@@ -256,6 +255,7 @@ const Dashboard = () => {
             inParty={partyState === 'active'}
             isReady={isReady}
             isSpectator={isSpectator}
+            isGameRunning={isGameRunning}
           />
         </div>
 
@@ -263,7 +263,7 @@ const Dashboard = () => {
           <PartyWidget
             partyState={partyState} partyCode={partyCode} setPartyState={setPartyState} onCreateParty={handleCreate} onJoinPrivate={handleJoin} onLeaveParty={handleLeave}
             members={members} currentUser={user} onToggleReady={() => socket.emit('toggle_ready', { roomCode: partyCode, user })}
-            memberCount={memberCount} maxSize={maxSize} error={partyError}
+            memberCount={memberCount} maxSize={maxSize} error={partyError} isGameRunning={isGameRunning}
           />
         </div>
 
