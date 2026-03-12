@@ -48,21 +48,27 @@ const ChatWidget = ({ isPartyMode, partyCode, username, myColor }) => {
   }, [isPartyMode, partyCode]);
 
   // Handle Room Joining & System Notifications
+  // FIX: Only depend on isPartyMode and partyCode.
+  // DO NOT depend on username, otherwise it reconnects when you edit your name.
   useEffect(() => {
     const room = isPartyMode ? partyCode : 'global';
-    socket.emit(isPartyMode ? 'join_room' : 'join_global', room);
-
+    
+    // Only join and announce if we are actually switching to a NEW room
     if (lastJoinedRoom !== room) {
+      socket.emit(isPartyMode ? 'join_room' : 'join_global', room);
+
       const transitionMsg = {
         user: "System",
         text: isPartyMode ? `Joined Party Chat: ${partyCode}` : "Joined Global Chat",
         type: "system",
         room: room 
       };
+      
       persistentMessages = [transitionMsg, ...persistentMessages.slice(0, 149)];
       setMessages([...persistentMessages]);
       lastJoinedRoom = room;
     }
+
   }, [isPartyMode, partyCode]);
 
   const sendMessage = (e) => {
@@ -70,7 +76,7 @@ const ChatWidget = ({ isPartyMode, partyCode, username, myColor }) => {
     if (inputText.trim()) {
       const msgData = {
         room: isPartyMode ? partyCode : 'global',
-        user: username,
+        user: username, // Uses the fresh username passed down as a prop!
         text: inputText,
         color: myColor,
         type: "user"
