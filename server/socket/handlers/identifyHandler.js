@@ -1,46 +1,42 @@
-const Party = require('../../models/Party');
 const User = require('../../models/User');
-const pendingRemovals = require('../state/pendingRemovals');
+const { broadcastPartyUpdate } = require('../services/partyService');
 
-const registerIdentifyHandler = (socket) => {
-  socket.on('identify', async (userId) => {
+const registerIdentifyHandler = (socket, io) => {
+  socket.on('identify', (userId) => {
     socket.userId = userId;
+    console.log(`User identified: ${userId}`);
+  });
 
-    // cancel disconnect removal if reconnect
-    if (pendingRemovals.has(userId)) {
-      console.log(`User ${userId} reconnected. Cancelling removal.`);
-      clearTimeout(pendingRemovals.get(userId));
-      pendingRemovals.delete(userId);
-    }
-
+  socket.on('update_username', async ({ userId, newUsername }) => {
     try {
-      // 🔥 SOURCE OF TRUTH → USER.currentParty
-      if (!userId || userId.toString().startsWith('guest')) return;
+      // 1. If it's a registered user, update the DB
+      if (userId && !userId.toString().startsWith('guest')) {
+        await User.findByIdAndUpdate(userId, { username: newUsername });
+      }
 
-      const userDoc = await User.findById(userId);
-      if (!userDoc || !userDoc.currentParty) return;
+      // 2. Update the socket's internal reference
+      socket.username = newUsername;
 
-      const party = await Party.findOne({ code: userDoc.currentParty });
-      if (!party) return;
+      // 3. Find if the user is in a party and update everyone
+      const Party = require('../../models/Party');
+      const party = await Party.findOne({ "members.id": userId });
+      
+      if (party) {
+        const member = party.members.find(m => m.id === userId);
+        if (member) {
+          member.username = newUsername;
+          party.markModified('members');
+          await party.save();
+          await broadcastPartyUpdate(party.code, io);
+        }
+      }
 
-      // safe rejoin
-      socket.join(party.code);
-      socket.leave('global');
-
-      const me = party.members.find(m => m.id === userId);
-
-      socket.emit('joined_party', {
-        roomName: party.code,
-        isPublic: party.type === 'public',
-        memberCount: party.members.length,
-        maxSize: party.maxSize,
-        myColor: me ? me.color : '#94a3b8'
-      });
-
+      socket.emit('username_updated', newUsername);
     } catch (err) {
-      console.error("Rejoin Error:", err);
+      console.error("Failed to update username:", err);
     }
   });
 };
 
+// --- CRITICAL FIX: Ensure this line exists ---
 module.exports = registerIdentifyHandler;

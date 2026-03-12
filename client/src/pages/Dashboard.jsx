@@ -187,6 +187,18 @@ const Dashboard = () => {
     socket.emit('cancel_match', user);
   };
 
+  const handleUpdateUsername = (newUsername) => {
+    const userId = user.id || user._id;
+    
+    // Sync with server
+    socket.emit('update_username', { userId, newUsername });
+
+    // Update local state and storage
+    const updatedUser = { ...user, username: newUsername, name: newUsername };
+    setUser(updatedUser);
+    localStorage.setItem('user', JSON.stringify(updatedUser));
+  };
+
   const handleCloseTab = () => { window.location.href = "about:blank"; };
 
   const myMemberData = members.find(m => m.id === (user.id || user._id));
@@ -210,7 +222,7 @@ const Dashboard = () => {
 
       {showSpectateModal && (
         <div className="absolute inset-0 z-[60] flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-in fade-in zoom-in duration-200">
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl p-8 max-sm w-full shadow-2xl relative">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl p-8 max-w-sm w-full shadow-2xl relative">
             
             <button 
               onClick={() => setShowSpectateModal(false)}
@@ -274,7 +286,12 @@ const Dashboard = () => {
           </button>
 
           <div className="flex-1 md:w-full">
-             <ProfileWidget user={user} onLogout={handleLogout} onNavigate={(m) => { setAuthMode(m); setShowAuthModal(true); }} />
+             <ProfileWidget 
+              user={user} 
+            onLogout={handleLogout} 
+              onUpdateUsername={handleUpdateUsername} // <-- Add this
+              onNavigate={(m) => { setAuthMode(m); setShowAuthModal(true); }} 
+            />
           </div>
         </div>
 

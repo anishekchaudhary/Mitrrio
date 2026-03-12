@@ -1,23 +1,24 @@
 import React, { useState } from 'react';
-import { User, Shield, LogOut, Zap, Trophy, Gamepad2, Settings } from 'lucide-react';
+import { User, Shield, LogOut, Zap, Trophy, Gamepad2, Settings, Edit2, Check, X } from 'lucide-react';
 
-const ProfileWidget = ({ user, onLogout, onNavigate }) => {
+const ProfileWidget = ({ user, onLogout, onNavigate, onUpdateUsername }) => {
   const [showSettings, setShowSettings] = useState(false);
+  
+  // --- NEW: EDITING STATE ---
+  const [isEditing, setIsEditing] = useState(false);
+  const [tempName, setTempName] = useState(user.username || user.name || "");
 
   if (!user) return <div className="text-white p-6">Loading Profile...</div>;
 
-  // --- 1. EXPONENTIAL LEVEL CALCULATION ---
+  // --- EXPONENTIAL LEVEL CALCULATION ---
   const totalXp = user.xp || 0;
   const currentLevel = Math.floor(Math.sqrt(totalXp / 100)) + 1;
-  
   const xpForCurrentLevel = 100 * Math.pow(currentLevel - 1, 2);
   const xpForNextLevel = 100 * Math.pow(currentLevel, 2);
-  
   const xpProgress = totalXp - xpForCurrentLevel;
   const xpNeeded = xpForNextLevel - xpForCurrentLevel;
   const progressPercent = Math.min(100, Math.max(0, (xpProgress / xpNeeded) * 100));
 
-  // --- 2. RANK CALCULATION ---
   const getRankTitle = (elo) => {
     if (elo < 1200) return "Rookie";
     if (elo < 1400) return "Scout";
@@ -27,16 +28,25 @@ const ProfileWidget = ({ user, onLogout, onNavigate }) => {
     return "Legend";
   };
 
-  // --- 3. TRUNCATE USERNAME (Max 20 chars) ---
   const displayName = user.username || user.name || "Guest";
-  const truncatedName = displayName.length > 20 
-    ? displayName.substring(0, 20) + "..." 
-    : displayName;
+
+  // --- NEW: HANDLE SAVE ---
+  const handleSave = () => {
+    if (tempName.trim() && tempName.trim().length <= 20) {
+      onUpdateUsername(tempName.trim());
+      setIsEditing(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setTempName(displayName);
+    setIsEditing(false);
+  };
 
   return (
     <div className="bg-slate-900/90 p-6 rounded-2xl border border-slate-700 pointer-events-auto h-full flex flex-col justify-center shadow-xl font-sans relative">
       
-      {/* SETTINGS GEAR (Top Right) */}
+      {/* SETTINGS GEAR */}
       {user.isLoggedIn && (
         <div className="absolute top-4 right-4 z-20">
           <button 
@@ -45,8 +55,6 @@ const ProfileWidget = ({ user, onLogout, onNavigate }) => {
           >
             <Settings size={18} />
           </button>
-
-          {/* DROPDOWN MENU */}
           {showSettings && (
             <div className="absolute right-0 mt-2 w-32 bg-slate-800 border border-slate-700 rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
               <button 
@@ -61,7 +69,7 @@ const ProfileWidget = ({ user, onLogout, onNavigate }) => {
       )}
 
       {/* HEADER SECTION */}
-      <div className="flex gap-4 mb-6 pr-8"> {/* Added padding-right to avoid overlap with gear */}
+      <div className="flex gap-4 mb-6 pr-8">
         <div className="relative">
           <div className="w-16 h-16 bg-slate-800 rounded-2xl flex items-center justify-center shrink-0 border-2 border-slate-700 shadow-inner">
             <User size={32} className="text-slate-400" />
@@ -72,10 +80,40 @@ const ProfileWidget = ({ user, onLogout, onNavigate }) => {
         </div>
         
         <div className="flex-1 flex flex-col justify-center overflow-hidden">
-          {/* DISPLAY TRUNCATED NAME */}
-          <h2 className="text-xl font-bold text-white truncate leading-tight" title={displayName}>
-            {truncatedName}
-          </h2>
+          {/* --- UPDATED: EDITABLE USERNAME LOGIC --- */}
+          {isEditing ? (
+            <div className="flex items-center gap-2">
+              <input 
+                value={tempName}
+                onChange={(e) => setTempName(e.target.value)}
+                autoFocus
+                className="bg-slate-950 border border-blue-500 rounded px-2 py-0.5 text-sm font-bold text-white outline-none w-full max-w-[140px]"
+                onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+              />
+              <button onClick={handleSave} className="text-emerald-500 hover:text-emerald-400 shrink-0">
+                <Check size={16} />
+              </button>
+              <button onClick={handleCancel} className="text-red-500 hover:text-red-400 shrink-0">
+                <X size={16} />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 group max-w-full">
+              <h2 className="text-xl font-bold text-white truncate leading-tight" title={displayName}>
+                {displayName.length > 20 ? displayName.substring(0, 20) + "..." : displayName}
+              </h2>
+              {/* Only show edit button if user is a guest (not logged in) */}
+              {!user.isLoggedIn && (
+                <button 
+                  onClick={() => setIsEditing(true)}
+                  className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-blue-400 transition-all shrink-0"
+                >
+                  <Edit2 size={14} />
+                </button>
+              )}
+            </div>
+          )}
+
           <div className="flex items-center gap-2 mt-1">
             <div className="text-yellow-400 text-[10px] font-black bg-yellow-400/10 px-2 py-0.5 rounded border border-yellow-400/20 flex items-center gap-1 uppercase tracking-wider">
                <Shield size={10} /> {getRankTitle(user.elo || 1000)}
@@ -117,7 +155,7 @@ const ProfileWidget = ({ user, onLogout, onNavigate }) => {
           </div>
       </div>
 
-      {/* AUTH ACTIONS (Only show Sign In/Up if NOT logged in) */}
+      {/* AUTH ACTIONS */}
       {!user.isLoggedIn && (
         <div className="flex gap-2">
           <button onClick={() => onNavigate('login')} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl border border-slate-600 transition-all text-sm uppercase tracking-wide">
