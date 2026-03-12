@@ -1,6 +1,6 @@
 const router = require('express').Router();
 const User = require('../models/User');
-const Match = require('../models/Match'); // <-- Import the new model
+const Match = require('../models/Match'); 
 const adminOnly = require('../middleware/adminMiddleware');
 
 // GET /api/admin/stats
