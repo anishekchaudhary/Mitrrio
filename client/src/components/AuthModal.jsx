@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Mail, Lock, User, ArrowRight, ChevronLeft, Loader2 } from 'lucide-react';
+console.log("API URL:", import.meta.env.VITE_API_URL);
 
 const AuthModal = ({ isOpen, onClose, onLogin, guestData = {}, initialMode = 'signin' }) => {
   const [view, setView] = useState(initialMode === 'login' ? 'signin' : initialMode);
@@ -36,7 +37,7 @@ const AuthModal = ({ isOpen, onClose, onLogin, guestData = {}, initialMode = 'si
       : { email: formData.email, password: formData.password };
 
     try {
-      const res = await fetch(`http://localhost:5000/api/auth${endpoint}`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/auth${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
