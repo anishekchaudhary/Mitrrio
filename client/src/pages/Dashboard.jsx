@@ -7,7 +7,8 @@ import PartyWidget from '../components/PartyWidget';
 import GamePanel from '../components/GamePanel';
 import AuthModal from '../components/AuthModal';
 import SessionReplaceModal from '../components/SessionReplaceModal';
-import { Eye, X } from 'lucide-react';
+import RulesModal from '../components/RulesModal'; 
+import { Eye, X, HelpCircle } from 'lucide-react';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -28,6 +29,7 @@ const Dashboard = () => {
   const [myColor, setMyColor] = useState("#94a3b8");
   
   const [isGameRunning, setIsGameRunning] = useState(false);
+  const [showRulesModal, setShowRulesModal] = useState(false);
 
   const [user, setUser] = useState(() => {
     const savedUser = localStorage.getItem('user');
@@ -46,6 +48,14 @@ const Dashboard = () => {
     localStorage.setItem('user', JSON.stringify(guestUser));
     return guestUser;
   });
+
+  useEffect(() => {
+    const hasSeenTutorial = localStorage.getItem('hasSeenTutorial');
+    if (!hasSeenTutorial) {
+      setShowRulesModal(true);
+      localStorage.setItem('hasSeenTutorial', 'true');
+    }
+  }, []);
 
   useEffect(() => {
     if (!socket.connected) socket.connect();
@@ -125,7 +135,7 @@ const Dashboard = () => {
       socket.off("party_update", onPartyUpdate);
       socket.off("elo_update", onEloUpdate);
     };
-  }, [user, navigate]);
+  }, [user, navigate, user.id, user._id]);
 
   const handleLogout = () => {
     localStorage.clear();
@@ -186,10 +196,21 @@ const Dashboard = () => {
   return (
     <div className="relative w-full h-screen bg-slate-950 font-sans text-slate-200 overflow-hidden">
       <SessionReplaceModal isOpen={showSessionModal} onCloseTab={handleCloseTab} />
+      
+      <RulesModal isOpen={showRulesModal} onClose={() => setShowRulesModal(false)} />
+
+      {/* --- ADDED SPACE HERE: right-[408px] -> right-[420px] --- */}
+      <button 
+        onClick={() => setShowRulesModal(true)}
+        className="hidden md:flex absolute top-6 right-[420px] z-40 bg-slate-800/80 hover:bg-cyan-600 border border-slate-700 text-slate-300 hover:text-white p-3 rounded-2xl shadow-xl transition-all group backdrop-blur-md items-center justify-center"
+        title="How to Play"
+      >
+        <HelpCircle size={24} className="group-hover:scale-110 transition-transform" />
+      </button>
 
       {showSpectateModal && (
         <div className="absolute inset-0 z-[60] flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-in fade-in zoom-in duration-200">
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl p-8 max-w-sm w-full shadow-2xl relative">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl p-8 max-sm w-full shadow-2xl relative">
             
             <button 
               onClick={() => setShowSpectateModal(false)}
@@ -242,8 +263,19 @@ const Dashboard = () => {
 
       <div className="relative z-10 w-full h-full md:overflow-hidden flex flex-col md:block p-4 md:p-0">
         
-        <div className="order-1 md:fixed md:top-6 md:right-6 md:z-30 w-full md:w-96 mb-4 md:mb-0 h-48 md:h-auto">
-          <ProfileWidget user={user} onLogout={handleLogout} onNavigate={(m) => { setAuthMode(m); setShowAuthModal(true); }} />
+        <div className="order-1 md:fixed md:top-6 md:right-6 md:z-30 w-full md:w-96 mb-4 md:mb-0 h-48 md:h-auto flex items-start gap-3 justify-end">
+          
+          <button 
+            onClick={() => setShowRulesModal(true)}
+            className="md:hidden bg-slate-800/80 hover:bg-cyan-600 border border-slate-700 text-slate-300 hover:text-white p-3 rounded-2xl shadow-xl transition-all group backdrop-blur-md flex items-center justify-center h-[72px] w-[72px]"
+            title="How to Play"
+          >
+            <HelpCircle size={24} className="group-hover:scale-110 transition-transform" />
+          </button>
+
+          <div className="flex-1 md:w-full">
+             <ProfileWidget user={user} onLogout={handleLogout} onNavigate={(m) => { setAuthMode(m); setShowAuthModal(true); }} />
+          </div>
         </div>
 
         <div className="order-2 md:fixed md:inset-0 md:z-10 md:pointer-events-none flex items-center justify-center py-4 md:py-0">
