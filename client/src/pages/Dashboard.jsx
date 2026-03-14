@@ -79,16 +79,29 @@ const Dashboard = () => {
     const onSessionDenied = () => setShowSessionModal(true);
 
     const onEloUpdate = (data) => {
-      setUser((prevUser) => {
-        const updatedUser = {
-          ...prevUser,
-          elo: data.elo,
-          xp: data.xp, // Make sure this is updated
-          gamesPlayed: data.gamesPlayed || prevUser.gamesPlayed + 1 // Ensure this is captured
-        };
-        localStorage.setItem("user", JSON.stringify(updatedUser));
-        return updatedUser;
-      });
+        console.log("%c[Dashboard] Received elo_update:", "color: lime; font-weight: bold;", data); // LOG A
+
+        setUser((prevUser) => {
+            const currentUserId = prevUser.id || prevUser._id;
+            console.log(`[Dashboard] Checking ID match: Received(${data.userId}) vs Current(${currentUserId})`); // LOG B
+
+            // Normalize IDs to strings for safe comparison
+            if (String(data.userId) !== String(currentUserId)) {
+                console.log("[Dashboard] ID Mismatch - Ignoring update.");
+                return prevUser;
+            }
+
+            const updatedUser = {
+            ...prevUser,
+            elo: data.elo,
+            xp: data.xp,
+            gamesPlayed: data.gamesPlayed
+            };
+
+            console.log("[Dashboard] State Updated to:", updatedUser); // LOG C
+            localStorage.setItem("user", JSON.stringify(updatedUser));
+            return updatedUser;
+        });
     };
 
     const onJoinedParty = (data) => {
@@ -127,6 +140,7 @@ const Dashboard = () => {
       }
     };
 
+    socket.on("elo_update", onEloUpdate);
     socket.on("session_denied", onSessionDenied);
     socket.on("session_replaced", onSessionReplaced);
     socket.on("joined_party", onJoinedParty);
@@ -134,7 +148,6 @@ const Dashboard = () => {
     socket.on("left_party", onLeftParty);
     socket.on("party_error", onPartyError);
     socket.on("party_update", onPartyUpdate);
-    socket.on("elo_update", onEloUpdate);
 
     return () => {
       socket.off("connect", identifyUser);

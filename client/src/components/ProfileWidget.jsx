@@ -1,12 +1,12 @@
-import React from 'react';
-import { User, Shield, LogOut, Zap, Trophy, Gamepad2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { User, Shield, LogOut, Zap, Trophy, Gamepad2, Settings } from 'lucide-react';
 
 const ProfileWidget = ({ user, onLogout, onNavigate }) => {
+  const [showSettings, setShowSettings] = useState(false);
+
   if (!user) return <div className="text-white p-6">Loading Profile...</div>;
 
   // --- 1. EXPONENTIAL LEVEL CALCULATION ---
-  // Formula: Level = sqrt(XP / 100) + 1
-  // Inverse: XP Required for Level L = 100 * (L-1)^2
   const totalXp = user.xp || 0;
   const currentLevel = Math.floor(Math.sqrt(totalXp / 100)) + 1;
   
@@ -17,7 +17,7 @@ const ProfileWidget = ({ user, onLogout, onNavigate }) => {
   const xpNeeded = xpForNextLevel - xpForCurrentLevel;
   const progressPercent = Math.min(100, Math.max(0, (xpProgress / xpNeeded) * 100));
 
-  // --- 2. RANK CALCULATION (ELO BASED) ---
+  // --- 2. RANK CALCULATION ---
   const getRankTitle = (elo) => {
     if (elo < 1200) return "Rookie";
     if (elo < 1400) return "Scout";
@@ -27,11 +27,41 @@ const ProfileWidget = ({ user, onLogout, onNavigate }) => {
     return "Legend";
   };
 
+  // --- 3. TRUNCATE USERNAME (Max 20 chars) ---
+  const displayName = user.username || user.name || "Guest";
+  const truncatedName = displayName.length > 20 
+    ? displayName.substring(0, 20) + "..." 
+    : displayName;
+
   return (
-    <div className="bg-slate-900/90 p-6 rounded-2xl border border-slate-700 pointer-events-auto h-full flex flex-col justify-center shadow-xl font-sans">
+    <div className="bg-slate-900/90 p-6 rounded-2xl border border-slate-700 pointer-events-auto h-full flex flex-col justify-center shadow-xl font-sans relative">
       
+      {/* SETTINGS GEAR (Top Right) */}
+      {user.isLoggedIn && (
+        <div className="absolute top-4 right-4 z-20">
+          <button 
+            onClick={() => setShowSettings(!showSettings)}
+            className="text-slate-500 hover:text-white transition-colors p-1"
+          >
+            <Settings size={18} />
+          </button>
+
+          {/* DROPDOWN MENU */}
+          {showSettings && (
+            <div className="absolute right-0 mt-2 w-32 bg-slate-800 border border-slate-700 rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
+              <button 
+                onClick={onLogout}
+                className="w-full text-left px-4 py-3 text-xs font-bold text-red-400 hover:bg-slate-700 flex items-center gap-2"
+              >
+                <LogOut size={14} /> Logout
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* HEADER SECTION */}
-      <div className="flex gap-4 mb-6">
+      <div className="flex gap-4 mb-6 pr-8"> {/* Added padding-right to avoid overlap with gear */}
         <div className="relative">
           <div className="w-16 h-16 bg-slate-800 rounded-2xl flex items-center justify-center shrink-0 border-2 border-slate-700 shadow-inner">
             <User size={32} className="text-slate-400" />
@@ -42,8 +72,9 @@ const ProfileWidget = ({ user, onLogout, onNavigate }) => {
         </div>
         
         <div className="flex-1 flex flex-col justify-center overflow-hidden">
-          <h2 className="text-xl font-bold text-white truncate leading-tight">
-            {user.username || user.name || "Guest"} 
+          {/* DISPLAY TRUNCATED NAME */}
+          <h2 className="text-xl font-bold text-white truncate leading-tight" title={displayName}>
+            {truncatedName}
           </h2>
           <div className="flex items-center gap-2 mt-1">
             <div className="text-yellow-400 text-[10px] font-black bg-yellow-400/10 px-2 py-0.5 rounded border border-yellow-400/20 flex items-center gap-1 uppercase tracking-wider">
@@ -76,7 +107,6 @@ const ProfileWidget = ({ user, onLogout, onNavigate }) => {
             <span className="text-slate-400">{Math.floor(xpProgress)} / {xpNeeded} XP</span>
           </div>
           <div className="w-full h-3 bg-slate-950 rounded-full overflow-hidden border border-slate-800 shadow-inner relative group">
-            {/* Tooltip on Hover */}
             <div className="absolute inset-0 z-10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                 <span className="text-[8px] font-black text-white drop-shadow-md">{progressPercent.toFixed(1)}%</span>
             </div>
@@ -87,12 +117,8 @@ const ProfileWidget = ({ user, onLogout, onNavigate }) => {
           </div>
       </div>
 
-      {/* AUTH ACTIONS */}
-      {user.isLoggedIn ? (
-          <button onClick={onLogout} className="w-full bg-red-500/5 hover:bg-red-500/20 text-red-500 hover:text-red-400 border border-red-500/30 font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all text-sm uppercase tracking-wide group">
-            <LogOut size={16} className="group-hover:-translate-x-1 transition-transform"/> Logout
-          </button>
-      ) : (
+      {/* AUTH ACTIONS (Only show Sign In/Up if NOT logged in) */}
+      {!user.isLoggedIn && (
         <div className="flex gap-2">
           <button onClick={() => onNavigate('login')} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl border border-slate-600 transition-all text-sm uppercase tracking-wide">
             Sign In
