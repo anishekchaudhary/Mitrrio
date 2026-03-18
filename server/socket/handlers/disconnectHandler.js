@@ -2,10 +2,14 @@ const Party = require('../../models/Party');
 const pendingRemovals = require('../state/pendingRemovals');
 const { handleActualLeave } = require('../services/partyService');
 
+// ADD THIS MISSING IMPORT:
+const { leaveQueueBySocket } = require('../services/matchmakingService');
 
 const registerDisconnectHandler = (socket, io) => {
   socket.on('disconnect', async () => {
-    leaveQueueBySocket(socket.id);
+    // Now this function is defined and will safely remove them from the queue
+    leaveQueueBySocket(socket.id); 
+    
     const userId = socket.userId;
     if (!userId) return;
 
