@@ -2,9 +2,16 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MessageSquare, Send } from 'lucide-react';
 import { socket } from '../utils/socket';
 
+// --- PERSISTENT STATE ---
+let persistentMessages = [];
+let lastJoinedRoom = null;
+
+// --- DEDUPLICATION STATE ---
+let lastHandledMessageStr = null;
+let lastHandledMessageTime = 0;
+
 const ChatWidget = ({ isPartyMode, partyCode, username, myColor }) => {
-  // 1. Persistent state: We no longer clear this on room change
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState(persistentMessages);
   const [inputText, setInputText] = useState("");
   const messagesEndRef = useRef(null);
 
@@ -16,35 +23,46 @@ const ChatWidget = ({ isPartyMode, partyCode, username, myColor }) => {
     scrollToBottom();
   }, [messages]);
 
-  // 2. Listener: Handles incoming messages from any room
+  // Listener: Handles incoming messages from any room
   useEffect(() => {
     const handleMessage = (message) => {
-      // Logic: Only show messages relevant to current room
       if (isPartyMode && message.room !== partyCode) return;
       if (!isPartyMode && message.room !== 'global') return;
 
-      setMessages((prev) => [message, ...prev.slice(0, 149)]);
+      // PREVENT DOUBLE MESSAGES (When Mobile & Desktop widgets are both mounted)
+      const msgStr = JSON.stringify(message);
+      const now = Date.now();
+      if (msgStr === lastHandledMessageStr && (now - lastHandledMessageTime) < 50) {
+        return; // Ignore exact duplicate received in the same millisecond tick
+      }
+      
+      lastHandledMessageStr = msgStr;
+      lastHandledMessageTime = now;
+
+      persistentMessages = [message, ...persistentMessages.slice(0, 149)];
+      setMessages([...persistentMessages]);
     };
 
     socket.on('receive_message', handleMessage);
     return () => socket.off('receive_message', handleMessage);
   }, [isPartyMode, partyCode]);
 
-  // 3. Persistent Transition: Logic for switching lobbies without clearing
+  // Handle Room Joining & System Notifications
   useEffect(() => {
-    // Join the appropriate socket room
     const room = isPartyMode ? partyCode : 'global';
     socket.emit(isPartyMode ? 'join_room' : 'join_global', room);
 
-    // Add a local "System" notification to the persistent chat history
-    const transitionMsg = {
-      user: "System",
-      text: isPartyMode ? `Joined Party Chat: ${partyCode}` : "Joined Global Chat",
-      type: "system",
-      room: room // Marked with current room so it stays visible in this view
-    };
-
-    setMessages((prev) => [transitionMsg, ...prev.slice(0, 149)]);
+    if (lastJoinedRoom !== room) {
+      const transitionMsg = {
+        user: "System",
+        text: isPartyMode ? `Joined Party Chat: ${partyCode}` : "Joined Global Chat",
+        type: "system",
+        room: room 
+      };
+      persistentMessages = [transitionMsg, ...persistentMessages.slice(0, 149)];
+      setMessages([...persistentMessages]);
+      lastJoinedRoom = room;
+    }
   }, [isPartyMode, partyCode]);
 
   const sendMessage = (e) => {
@@ -79,19 +97,20 @@ const ChatWidget = ({ isPartyMode, partyCode, username, myColor }) => {
         </div>
       </div>
 
-      {/* MESSAGES AREA - Persistently scrolled with col-reverse */}
+      {/* MESSAGES AREA */}
       <div className="flex-1 overflow-y-auto p-4 flex flex-col-reverse scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
         <div ref={messagesEndRef} />
         
         {messages.map((msg, idx) => {
           const isSystem = msg.user === "System";
           const isGreen = msg.type === "system_green"; 
+          const isRed = msg.type === "system_red";
 
           return (
             <div key={idx} className="text-sm break-words animate-in fade-in slide-in-from-bottom-2 duration-300 py-1.5">
               {isSystem ? (
                 <span className={`font-bold uppercase text-[10px] tracking-widest ${
-                  isGreen ? "text-green-400" : "text-yellow-500/80"
+                  isGreen ? "text-green-400" : isRed ? "text-red-500" : "text-yellow-500/80"
                 }`}>
                   <span className="mr-2 opacity-50">System:</span>
                   {msg.text}

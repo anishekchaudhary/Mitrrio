@@ -12,7 +12,7 @@ function App() {
         {/* Main Dashboard & Game Routes */}
         <Route path="/" element={<Dashboard />} />
         <Route path="/game" element={<GamePage />} />
-        <Route path="/game/:roomId" element={<GamePage />} />
+        <Route path="/game/:id" element={<GamePage />} />
 
         {/* Authentication Flow Routes */}
         {/* Users arrive here from the verification email */}
