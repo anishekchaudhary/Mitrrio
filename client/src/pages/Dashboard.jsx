@@ -208,7 +208,7 @@ const Dashboard = () => {
       {/* BACKGROUND */}
       <div 
         className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000"
-        style={{ backgroundImage: "url('/Background.png')", opacity: 0.7 }}
+        style={{ backgroundImage: "url('/Background.png')", opacity: 0.9 }}
       ></div>
       <div className="absolute inset-0 z-0 bg-gradient-to-t from-slate-950 via-slate-900/60 to-transparent"></div>
 

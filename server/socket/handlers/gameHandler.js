@@ -4,18 +4,14 @@ const pendingRemovals = require('../state/pendingRemovals');
 const Party = require('../../models/Party');
 const { resetPartyReadiness, broadcastPartyUpdate } = require('../services/partyService');
 const User = require('../../models/User');
-const { calculateNewRatings } = require('../../utils/elo');
 
 const registerGameHandler = (socket, io) => {
   
   socket.on('get_game_state', (roomCode) => {
-    // --- RECONNECT LOGIC: Clear disconnect timeout if they return ---
     if (socket.userId && pendingRemovals.has(socket.userId)) {
         clearTimeout(pendingRemovals.get(socket.userId));
         pendingRemovals.delete(socket.userId);
-        console.log(`User ${socket.userId} reconnected safely.`);
     }
-
     const game = activeGames.get(roomCode);
     if (game) {
       socket.join(roomCode); 
@@ -41,7 +37,7 @@ const registerGameHandler = (socket, io) => {
   socket.on('forfeit_game', ({ roomCode, userId }) => {
     const updatedGame = handleForfeit(roomCode, userId);
     if (updatedGame) {
-      io.to(roomCode).emit('receive_message', { room: roomCode, user: "System", text: `Player disconnected and forfeited.`, type: "system" });
+      io.to(roomCode).emit('receive_message', { room: roomCode, user: "System", text: `Player disconnected and forfeited.`, type: "system_red" });
       processGameState(io, roomCode, updatedGame);
     }
   });
@@ -61,46 +57,83 @@ const processGameState = async (io, roomCode, game) => {
       const userDocs = await User.find({ _id: { $in: registeredIds } });
       const userMap = new Map(userDocs.map(u => [u._id.toString(), u]));
 
+      // Fetch party BEFORE calculating to update the baseline stats
+      const party = await Party.findOne({ code: roomCode });
+
       for (let i = 0; i < finishedPlayers.length; i++) {
         const playerA = finishedPlayers[i];
         const isGuest = playerA.id.toString().startsWith('guest');
+        
+        // Dynamic baseline fetching for both Guest and Registered
+        let currentEloA = isGuest ? (playerA.elo || 1200) : (userMap.get(playerA.id.toString())?.elo || 1200);
+        let currentXpA = isGuest ? (playerA.xp || 0) : (userMap.get(playerA.id.toString())?.xp || 0);
+        let currentGamesA = isGuest ? (playerA.gamesPlayed || 0) : (userMap.get(playerA.id.toString())?.gamesPlayed || 0);
+
         let totalEloChange = 0;
-        let currentEloA = isGuest ? 1200 : (userMap.get(playerA.id.toString())?.elo || 1200);
 
         for (let j = 0; j < finishedPlayers.length; j++) {
           if (i === j) continue;
           const playerB = finishedPlayers[j];
-          let currentEloB = playerB.id.toString().startsWith('guest') ? 1200 : (userMap.get(playerB.id.toString())?.elo || 1200);
+          let currentEloB = playerB.id.toString().startsWith('guest') ? (playerB.elo || 1200) : (userMap.get(playerB.id.toString())?.elo || 1200);
 
-          const { newWinnerRating, newLoserRating } = calculateNewRatings(currentEloA, currentEloB);
-          totalEloChange += (playerA.rank < playerB.rank) ? (newWinnerRating - currentEloA) : (newLoserRating - currentEloA);
+          const expectedScoreA = 1 / (1 + Math.pow(10, (currentEloB - currentEloA) / 400));
+          const actualScoreA = playerA.rank < playerB.rank ? 1 : 0; 
+          totalEloChange += 32 * (actualScoreA - expectedScoreA);
         }
 
-        const finalEloChange = Math.round(totalEloChange / Math.max(1, finishedPlayers.length - 1));
-        const xpGain = 50 + Math.max(0, (4 - playerA.rank) * 10);
+        const divisor = Math.max(1, finishedPlayers.length - 1);
+        const finalEloChange = Math.round(totalEloChange / divisor);
+        const rankBonus = Math.max(0, (finishedPlayers.length - playerA.rank) * 15);
+        const xpGain = 50 + rankBonus;
 
-        let newElo = currentEloA + finalEloChange, newXp = xpGain, newGames = 1;
+        let newElo = currentEloA + finalEloChange;
+        let newXp = currentXpA + xpGain;
+        let newGames = currentGamesA + 1;
 
         if (!isGuest) {
-            const updatedUser = await User.findByIdAndUpdate(
-              playerA.id, { $inc: { elo: finalEloChange, xp: xpGain, gamesPlayed: 1 } }, { new: true }
-            );
-            newElo = updatedUser.elo; newXp = updatedUser.xp; newGames = updatedUser.gamesPlayed;
+            try {
+                const updatedUser = await User.findByIdAndUpdate(
+                  playerA.id, 
+                  { $inc: { elo: finalEloChange, xp: xpGain, gamesPlayed: 1 } }, 
+                  { returnDocument: 'after' } 
+                );
+                if (updatedUser) {
+                    newElo = updatedUser.elo; 
+                    newXp = updatedUser.xp; 
+                    newGames = updatedUser.gamesPlayed;
+                }
+            } catch (dbErr) {
+                console.error(`[DB Update Error]:`, dbErr);
+            }
         }
 
-        io.to(roomCode).emit('elo_update', { userId: playerA.id, elo: newElo, xp: newXp, gamesPlayed: newGames, change: finalEloChange });
+        // --- THE CRITICAL FIX: Save the new stats back into the Private Lobby ---
+        if (party) {
+            const partyMember = party.members.find(m => m.id === playerA.id);
+            if (partyMember) {
+                partyMember.elo = newElo;
+                partyMember.xp = newXp;
+                partyMember.gamesPlayed = newGames;
+            }
+        }
+
+        io.to(roomCode).emit('elo_update', { 
+            userId: playerA.id, elo: newElo, xp: newXp, gamesPlayed: newGames, change: finalEloChange 
+        });
       }
 
-      await broadcastPartyUpdate(roomCode, io);
-      io.to(roomCode).emit('show_leaderboard', { players: finishedPlayers });
-      activeGames.delete(roomCode);
-
-      // --- PUBLIC LOBBY AUTO-EXIT ---
-      const party = await Party.findOne({ code: roomCode });
+      // Cleanup & Lobby Management
       if (party && party.type === 'public') {
          await Party.deleteOne({ code: roomCode });
-         io.to(roomCode).emit('left_party'); // Forces frontend back to "menu" state
+         io.to(roomCode).emit('left_party'); // Auto-kick everyone from Public
+      } else if (party) {
+         party.markModified('members'); 
+         await party.save(); // Save updated private lobby stats for the next game
+         await broadcastPartyUpdate(roomCode, io);
       }
+
+      io.to(roomCode).emit('show_leaderboard', { players: finishedPlayers });
+      activeGames.delete(roomCode);
 
     } catch (err) {
       console.error("[GameHandler Error]", err);
@@ -108,7 +141,6 @@ const processGameState = async (io, roomCode, game) => {
   }
 };
 
-// --- THE GLOBAL TIMER ENGINE ---
 const startGameTimerLoop = (io) => {
   setInterval(() => {
     const timeouts = checkTurnTimeouts();
