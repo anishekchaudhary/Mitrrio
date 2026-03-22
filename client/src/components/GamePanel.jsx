@@ -1,57 +1,60 @@
 import React from 'react';
-import { Play, Eye } from 'lucide-react';
+import { Play, Eye, CheckCircle, Swords } from 'lucide-react';
 
-const GamePanel = ({ username, color, onPlay, onSpectate }) => {
+const GamePanel = ({ username, color, onPlay, onSpectate, inParty, isReady, isSpectator }) => {
   return (
-    <div className="flex flex-col items-center justify-center w-full pointer-events-auto p-4">
+    <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-700 p-8 rounded-3xl shadow-2xl w-full max-w-sm flex flex-col items-center pointer-events-auto transition-all duration-300">
       
-      <h1 className="text-9xl font-black text-white tracking-tighter mb-8 drop-shadow-[0_0_35px_rgba(255,255,255,0.15)] italic select-none text-center">
-        Tug-o-Luck
-      </h1>
+      {/* GAME NAME HEADER */}
+      <div className="mb-8 text-center w-full pb-6 border-b border-slate-700/50">
+        <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400 tracking-widest uppercase flex items-center justify-center gap-3 drop-shadow-lg">
+          <Swords size={28} className="text-indigo-400" />
+          Tug-o-Luck
+        </h1>
+      </div>
 
-      <div className="bg-slate-900/80 backdrop-blur-xl border-2 border-slate-700 p-8 rounded-3xl shadow-2xl w-full max-w-lg relative z-20 transform transition-transform duration-500">
+      {/* PLAYER AVATAR */}
+      <div className="w-24 h-24 rounded-full mb-6 border-4 shadow-lg flex items-center justify-center bg-slate-800" style={{ borderColor: color }}>
+         <span className="text-4xl font-black" style={{ color }}>{username?.charAt(0).toUpperCase()}</span>
+      </div>
+
+      <h2 className="text-2xl font-black text-white uppercase tracking-widest mb-8">{username}</h2>
+
+      {/* DYNAMIC BUTTONS */}
+      <div className="w-full flex flex-col gap-4">
         
-        <div className="flex items-center gap-6 mb-8">
-          {/* Color Display (Read Only) */}
-          <div className="relative shrink-0 flex flex-col items-center gap-2">
-            <div 
-              className="w-16 h-16 rounded-full border-[4px] border-slate-600 shadow-inner transition-all overflow-hidden"
-              style={{ backgroundColor: color }}
-            />
-            <label className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] select-none">
-              Color
-            </label>
-          </div>
+        {/* Primary Action Button (Play / Ready / Un-spectate) */}
+        <button 
+          onClick={onPlay} 
+          className={`flex items-center justify-center gap-2 w-full py-4 rounded-2xl font-black uppercase tracking-widest text-white transition-all duration-300 ${
+             isReady && !isSpectator
+               ? 'bg-green-600 hover:bg-green-500 shadow-[0_0_20px_rgba(22,163,74,0.4)] scale-[1.02]' 
+               : isSpectator
+               ? 'bg-slate-700 hover:bg-slate-600 border border-slate-500 shadow-lg' // Distinct style for spectators wanting to return to player pool
+               : 'bg-indigo-600 hover:bg-indigo-500 shadow-lg'
+          }`}
+        >
+          {isReady && !isSpectator ? <CheckCircle size={20} /> : <Play size={20} />}
+          {inParty 
+            ? (isSpectator ? 'Join as Player' : (isReady ? 'Ready!' : 'Click to Ready')) 
+            : 'Find Match'}
+        </button>
 
-          {/* Name Display (Read Only) */}
-          <div className="flex-1 self-end mb-3">
-            <div className="bg-slate-950 border-2 border-slate-700 rounded-2xl p-3 flex flex-col relative transition-all">
-              <label className="text-xs font-bold text-slate-500 uppercase mb-0.5 tracking-wider px-1">
-                Identity
-              </label>
-              <div className="text-3xl font-bold text-white px-1 truncate">
-                {username}
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* Secondary Action Button (Spectate / Toggle Spectator) */}
+        <button 
+          onClick={onSpectate} 
+          className={`flex items-center justify-center gap-2 w-full p-4 border rounded-2xl font-bold transition-all ${
+             isSpectator 
+               ? 'bg-cyan-900/40 border-cyan-500 text-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.3)]' 
+               : 'bg-slate-900/60 border-slate-700 text-slate-300 hover:bg-slate-800'
+          }`}
+        >
+          <Eye size={20} className={isSpectator ? "text-cyan-400 animate-pulse" : "text-slate-400"} />
+          {inParty 
+            ? (isSpectator ? "Spectating" : "Spectate Instead") 
+            : "Spectate Game"}
+        </button>
 
-        {/* Main Buttons */}
-        <div className="space-y-4">
-          <button 
-            onClick={onPlay}
-            className="w-full bg-blue-600 hover:bg-blue-500 text-white text-2xl font-black py-4 rounded-2xl shadow-lg shadow-blue-600/20 transform active:scale-[0.98] transition-all flex items-center justify-center gap-3 uppercase tracking-wide group"
-          >
-            <Play fill="currentColor" size={28} className="group-hover:scale-110 transition-transform" /> Play
-          </button>
-
-          <button 
-            onClick={onSpectate}
-            className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-2xl font-black py-4 rounded-2xl border-2 border-slate-600 transform active:scale-[0.98] transition-all flex items-center justify-center gap-3 uppercase tracking-wide group"
-          >
-            <Eye size={28} className="group-hover:scale-110 transition-transform" /> Spectate
-          </button>
-        </div>
       </div>
     </div>
   );

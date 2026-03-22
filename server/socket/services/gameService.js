@@ -4,13 +4,18 @@ const TARGET_SCORE = 50;
 const TURN_TIME_LIMIT = 30000; // 30 Seconds
 
 const createGame = (roomCode, members) => {
+  // --- NEW: Split the lobby into players and spectators ---
+  const activeMembers = members.filter(m => !m.isSpectator);
+  const spectatorMembers = members.filter(m => m.isSpectator);
+
   const gameData = {
     roomCode,
     status: 'playing', 
     turnIndex: 0,
     currentTurnTotal: 0,
     turnDeadline: Date.now() + TURN_TIME_LIMIT,
-    activePlayers: members.map(m => ({
+    // Only active players get scores and Elo baselines
+    activePlayers: activeMembers.map(m => ({
       id: m.id, 
       username: m.username, 
       color: m.color, 
@@ -19,6 +24,12 @@ const createGame = (roomCode, members) => {
       elo: m.elo || 1200,              
       xp: m.xp || 0,                   
       gamesPlayed: m.gamesPlayed || 0  
+    })),
+    // Spectators just watch
+    spectators: spectatorMembers.map(m => ({
+      id: m.id, 
+      username: m.username, 
+      color: m.color
     })),
     winners: [], losers: [], finished: []
   };
@@ -37,8 +48,14 @@ const getNextPlayingIndex = (players, startIndex) => {
 
 const findGameByUserId = (userId) => {
   for (const [roomCode, game] of activeGames.entries()) {
-    if (game.status === 'playing' && game.activePlayers.some(p => p.id === userId)) {
-      return { roomCode, game };
+    if (game.status === 'playing') {
+      // Check both active players and spectators
+      const isPlayer = game.activePlayers.some(p => p.id === userId);
+      const isSpectator = game.spectators && game.spectators.some(p => p.id === userId);
+      
+      if (isPlayer || isSpectator) {
+        return { roomCode, game };
+      }
     }
   }
   return null;
@@ -96,7 +113,7 @@ const handleForfeit = (roomCode, userId) => {
   if (!game || game.status !== 'playing') return null;
 
   const playerIndex = game.activePlayers.findIndex(p => p.id === userId);
-  if (playerIndex === -1) return null; 
+  if (playerIndex === -1) return null; // Ignores spectators trying to forfeit
 
   const player = game.activePlayers[playerIndex];
   if (player.matchState !== 'playing') return null;

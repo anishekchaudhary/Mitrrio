@@ -1,20 +1,27 @@
+const activeGames = require('../state/activeGames');
+
 const registerChatHandler = (socket, io) => {
-  // 1. Listen for explicit room joins from the frontend
-  socket.on('join_global', (room) => {
-    socket.join(room); // Joins 'global'
-  });
+  socket.on('join_global', () => socket.join('global'));
+  socket.on('join_room', (room) => socket.join(room));
 
-  socket.on('join_room', (room) => {
-    socket.join(room); // Joins 'PUB_XYZ' or private codes
-  });
-
-  socket.on('send_message', (data) => {
-    // 2. Safety fallback: If they aren't in the room, force them in
-    if (!socket.rooms.has(data.room)) {
-      socket.join(data.room);
+  socket.on('send_message', (msgData) => {
+    const { room, user } = msgData;
+    
+    // --- SPECTATOR CHAT SEGREGATION LOGIC ---
+    const game = activeGames.get(room);
+    if (game && game.status === 'playing') {
+       // Check if the sender is playing the game
+       const isPlaying = game.activePlayers.some(p => p.username === user);
+       
+       if (!isPlaying) {
+         // Sender is a spectator. Emit ONLY to the spectator sub-channel.
+         io.to(`${room}_spectator`).emit('receive_message', msgData);
+         return; 
+       }
     }
-    // 3. Broadcast the message to everyone in that room
-    io.to(data.room).emit('receive_message', data);
+    
+    // If game is NOT active (lobby), or sender is a playing Player, everyone sees it.
+    io.to(room).emit('receive_message', msgData);
   });
 };
 

@@ -15,6 +15,13 @@ const registerGameHandler = (socket, io) => {
     const game = activeGames.get(roomCode);
     if (game) {
       socket.join(roomCode); 
+      
+      // --- NEW: Join the Spectator Chat Channel if not playing ---
+      const isPlaying = game.activePlayers.some(p => p.id === socket.userId);
+      if (!isPlaying) {
+        socket.join(`${roomCode}_spectator`);
+      }
+
       socket.emit('game_update', game);
     } else {
       socket.emit('game_update', null);
@@ -57,14 +64,12 @@ const processGameState = async (io, roomCode, game) => {
       const userDocs = await User.find({ _id: { $in: registeredIds } });
       const userMap = new Map(userDocs.map(u => [u._id.toString(), u]));
 
-      // Fetch party BEFORE calculating to update the baseline stats
       const party = await Party.findOne({ code: roomCode });
 
       for (let i = 0; i < finishedPlayers.length; i++) {
         const playerA = finishedPlayers[i];
         const isGuest = playerA.id.toString().startsWith('guest');
         
-        // Dynamic baseline fetching for both Guest and Registered
         let currentEloA = isGuest ? (playerA.elo || 1200) : (userMap.get(playerA.id.toString())?.elo || 1200);
         let currentXpA = isGuest ? (playerA.xp || 0) : (userMap.get(playerA.id.toString())?.xp || 0);
         let currentGamesA = isGuest ? (playerA.gamesPlayed || 0) : (userMap.get(playerA.id.toString())?.gamesPlayed || 0);
@@ -107,7 +112,6 @@ const processGameState = async (io, roomCode, game) => {
             }
         }
 
-        // --- THE CRITICAL FIX: Save the new stats back into the Private Lobby ---
         if (party) {
             const partyMember = party.members.find(m => m.id === playerA.id);
             if (partyMember) {
@@ -122,13 +126,12 @@ const processGameState = async (io, roomCode, game) => {
         });
       }
 
-      // Cleanup & Lobby Management
       if (party && party.type === 'public') {
          await Party.deleteOne({ code: roomCode });
-         io.to(roomCode).emit('left_party'); // Auto-kick everyone from Public
+         io.to(roomCode).emit('left_party');
       } else if (party) {
          party.markModified('members'); 
-         await party.save(); // Save updated private lobby stats for the next game
+         await party.save(); 
          await broadcastPartyUpdate(roomCode, io);
       }
 
