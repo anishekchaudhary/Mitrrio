@@ -4,10 +4,7 @@ import { Users, Copy, X, ArrowRight, DoorOpen, AlertCircle, Play, CheckCircle } 
 const PartyWidget = ({ 
   partyState, partyCode, setPartyState, onJoinPrivate, 
   onCreateParty, onLeaveParty, memberCount, maxSize, error,
-  // NEW PROPS
-  members = [], 
-  currentUser, 
-  onToggleReady 
+  members = [], currentUser, onToggleReady, isGameRunning
 }) => {
   const [inputCode, setInputCode] = useState("");
 
@@ -15,22 +12,24 @@ const PartyWidget = ({
     navigator.clipboard.writeText(partyCode);
   };
 
-  // Calculate Ready State
   const readyCount = useMemo(() => members.filter(m => m.isReady).length, [members]);
+  
   const isMeReady = useMemo(() => {
     const me = members.find(m => m.id === (currentUser.id || currentUser._id));
     return me ? me.isReady : false;
   }, [members, currentUser]);
 
-  // Check if everyone is ready (visual cue only for now)
+  const isSpectator = useMemo(() => {
+    const me = members.find(m => m.id === (currentUser.id || currentUser._id));
+    return me ? me.isSpectator : false;
+  }, [members, currentUser]);
+
   const allReady = memberCount > 0 && readyCount === memberCount;
 
   return (
     <div className="bg-slate-900/90 backdrop-blur-md border border-slate-700 p-8 rounded-2xl shadow-2xl h-full flex flex-col justify-center font-sans pointer-events-auto">
       
-      {/* 1. MENU VIEW & 2. JOINING VIEW (Keep unchanged) */}
-      {partyState === 'menu' && ( /* ... existing code ... */ 
-         /* (Copy previous content for menu view) */
+      {partyState === 'menu' && (
          <>
           <div className="flex items-center gap-4 mb-8">
             <div className="bg-cyan-500/20 p-4 rounded-xl text-cyan-400">
@@ -53,8 +52,7 @@ const PartyWidget = ({
         </>
       )}
 
-      {partyState === 'joining' && ( /* ... existing code ... */ 
-        /* (Copy previous content for joining view) */
+      {partyState === 'joining' && (
         <>
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-xl font-black text-white uppercase italic tracking-tighter">Join Party</h3>
@@ -92,7 +90,6 @@ const PartyWidget = ({
         </>
       )}
 
-      {/* 3. ACTIVE PARTY VIEW (UPDATED) */}
       {partyState === 'active' && (
         <>
           <div className="flex justify-between items-start mb-6">
@@ -114,7 +111,6 @@ const PartyWidget = ({
             </button>
           </div>
 
-          {/* READY COUNT DISPLAY */}
           <div className="flex items-center justify-between gap-2 mb-4 bg-slate-800/30 py-2 px-4 rounded-xl border border-slate-700/50">
             <div className="flex items-center gap-2">
               <Users size={14} className="text-cyan-400" />
@@ -130,17 +126,24 @@ const PartyWidget = ({
             </div>
           </div>
 
-          {/* READY BUTTON */}
           <button 
             onClick={onToggleReady}
-            className={`w-full py-4 rounded-xl flex items-center justify-center gap-3 uppercase italic text-lg transition-all active:scale-95 shadow-lg ${
-              isMeReady 
-                ? "bg-green-600 hover:bg-green-500 text-white shadow-green-900/20" 
-                : "bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white shadow-slate-900/20"
+            disabled={isGameRunning && !isMeReady && !isSpectator}
+            title={isGameRunning && !isMeReady && !isSpectator ? "Game already running! Join as Spectator." : ""}
+            className={`w-full py-4 rounded-xl flex items-center justify-center gap-3 font-black uppercase tracking-widest text-white transition-all active:scale-95 shadow-lg ${
+              isMeReady && !isSpectator
+                 ? 'bg-green-600 hover:bg-green-500 shadow-[0_0_20px_rgba(22,163,74,0.4)]' 
+                 : isSpectator
+                 ? 'bg-slate-700 hover:bg-slate-600 border border-slate-500 shadow-lg'
+                 : isGameRunning
+                 ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
+                 : 'bg-indigo-600 hover:bg-indigo-500 shadow-lg'
             }`}
           >
-             {isMeReady ? (
+             {isMeReady && !isSpectator ? (
                <>Ready! <CheckCircle size={24} /></>
+             ) : isSpectator ? (
+               <>Join as Player <Play size={24} /></>
              ) : (
                <>Click to Ready <Play size={24} /></>
              )}

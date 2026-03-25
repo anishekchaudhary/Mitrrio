@@ -15,13 +15,8 @@ const registerGameHandler = (socket, io) => {
     const game = activeGames.get(roomCode);
     if (game) {
       socket.join(roomCode); 
-      
-      // --- NEW: Join the Spectator Chat Channel if not playing ---
       const isPlaying = game.activePlayers.some(p => p.id === socket.userId);
-      if (!isPlaying) {
-        socket.join(`${roomCode}_spectator`);
-      }
-
+      if (!isPlaying) socket.join(`${roomCode}_spectator`);
       socket.emit('game_update', game);
     } else {
       socket.emit('game_update', null);
@@ -70,16 +65,17 @@ const processGameState = async (io, roomCode, game) => {
         const playerA = finishedPlayers[i];
         const isGuest = playerA.id.toString().startsWith('guest');
         
-        let currentEloA = isGuest ? (playerA.elo || 1200) : (userMap.get(playerA.id.toString())?.elo || 1200);
-        let currentXpA = isGuest ? (playerA.xp || 0) : (userMap.get(playerA.id.toString())?.xp || 0);
-        let currentGamesA = isGuest ? (playerA.gamesPlayed || 0) : (userMap.get(playerA.id.toString())?.gamesPlayed || 0);
+        // STRICT FALLBACKS: Uses ?? to respect "0" xp and gamesPlayed
+        let currentEloA = isGuest ? (playerA.elo ?? 1200) : (userMap.get(playerA.id.toString())?.elo ?? 1200);
+        let currentXpA = isGuest ? (playerA.xp ?? 0) : (userMap.get(playerA.id.toString())?.xp ?? 0);
+        let currentGamesA = isGuest ? (playerA.gamesPlayed ?? 0) : (userMap.get(playerA.id.toString())?.gamesPlayed ?? 0);
 
         let totalEloChange = 0;
 
         for (let j = 0; j < finishedPlayers.length; j++) {
           if (i === j) continue;
           const playerB = finishedPlayers[j];
-          let currentEloB = playerB.id.toString().startsWith('guest') ? (playerB.elo || 1200) : (userMap.get(playerB.id.toString())?.elo || 1200);
+          let currentEloB = playerB.id.toString().startsWith('guest') ? (playerB.elo ?? 1200) : (userMap.get(playerB.id.toString())?.elo ?? 1200);
 
           const expectedScoreA = 1 / (1 + Math.pow(10, (currentEloB - currentEloA) / 400));
           const actualScoreA = playerA.rank < playerB.rank ? 1 : 0; 
@@ -126,6 +122,8 @@ const processGameState = async (io, roomCode, game) => {
         });
       }
 
+      activeGames.delete(roomCode);
+
       if (party && party.type === 'public') {
          await Party.deleteOne({ code: roomCode });
          io.to(roomCode).emit('left_party');
@@ -136,7 +134,6 @@ const processGameState = async (io, roomCode, game) => {
       }
 
       io.to(roomCode).emit('show_leaderboard', { players: finishedPlayers });
-      activeGames.delete(roomCode);
 
     } catch (err) {
       console.error("[GameHandler Error]", err);
