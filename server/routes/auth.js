@@ -110,14 +110,10 @@ router.post('/verify-email', async (req, res) => {
       elo: user.elo,
       xp: user.xp,
       gamesPlayed: user.gamesPlayed,
-      isVerified: user.isVerified
+      isVerified: user.isVerified,
+      isAdmin: user.isAdmin // <-- MUST BE HERE
     };
-
-    res.status(200).json({ 
-      message: "Email Verified Successfully!", 
-      token: jwtToken, 
-      user: userData // Now this variable definitely exists
-    });
+    res.status(200).json({ message: "Email Verified", token: jwtToken, user: userData });
 
   } catch (err) {
     console.error("[Auth] Verification Error:", err);

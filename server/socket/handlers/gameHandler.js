@@ -4,6 +4,7 @@ const pendingRemovals = require('../state/pendingRemovals');
 const Party = require('../../models/Party');
 const { resetPartyReadiness, broadcastPartyUpdate } = require('../services/partyService');
 const User = require('../../models/User');
+const Match = require('../../models/Match');
 
 const registerGameHandler = (socket, io) => {
   
@@ -121,6 +122,21 @@ const processGameState = async (io, roomCode, game) => {
             userId: playerA.id, elo: newElo, xp: newXp, gamesPlayed: newGames, change: finalEloChange 
         });
       }
+
+      try {
+          const newMatch = new Match({
+              roomCode: roomCode,
+              players: finishedPlayers.map(p => ({
+                  username: p.username,
+                  score: p.score,
+                  rank: p.rank
+              }))
+          });
+          await newMatch.save();
+      } catch (matchErr) {
+          console.error("[Match Save Error]:", matchErr);
+      }
+
 
       activeGames.delete(roomCode);
 
