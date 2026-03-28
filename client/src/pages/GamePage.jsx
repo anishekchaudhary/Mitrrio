@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { socket } from '../utils/socket';
-import { Dices, CheckCircle, LogOut, Trophy, AlertTriangle, Timer } from 'lucide-react';
+import { Dices, CheckCircle, LogOut, Trophy, AlertTriangle, Timer, HelpCircle } from 'lucide-react';
 import ChatWidget from '../components/ChatWidget'; 
+import RulesModal from '../components/RulesModal'; // <-- IMPORT THE RULES MODAL
 
 const GamePage = () => {
   const { id: roomCode } = useParams();
@@ -13,6 +14,7 @@ const GamePage = () => {
   const [isRolling, setIsRolling] = useState(false);
   const [timeLeft, setTimeLeft] = useState(30);
   const [showExitModal, setShowExitModal] = useState(false);
+  const [showRulesModal, setShowRulesModal] = useState(false); // <-- STATE FOR RULES MODAL
 
   const [user] = useState(() => {
     const savedUser = localStorage.getItem('user');
@@ -123,6 +125,9 @@ const GamePage = () => {
       <div className="absolute inset-0 z-0 bg-cover bg-center opacity-40" style={{ backgroundImage: "url('/Background.png')" }}></div>
       <div className="absolute inset-0 z-0 bg-gradient-to-br from-slate-950 via-slate-900/80 to-slate-950"></div>
 
+      {/* --- RENDER THE NEW RULES MODAL --- */}
+      <RulesModal isOpen={showRulesModal} onClose={() => setShowRulesModal(false)} />
+
       {showExitModal && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/90 backdrop-blur-md p-4 animate-in fade-in zoom-in duration-200">
           <div className="bg-slate-900 border border-slate-700 rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl">
@@ -163,16 +168,27 @@ const GamePage = () => {
           <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">Tug-o-Luck</p>
         </div>
         
-        <button 
-          onClick={() => setShowExitModal(true)}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition-all ${
-            isSpectator 
-              ? 'bg-slate-500/10 text-slate-400 border border-slate-500/30 hover:bg-slate-500 hover:text-white'
-              : 'bg-red-500/10 text-red-500 border border-red-500/30 hover:bg-red-500 hover:text-white'
-          }`}
-        >
-          <LogOut size={16} /> {isSpectator ? 'Exit' : 'Forfeit'}
-        </button>
+        {/* --- ADD HELP BUTTON TO HEADER --- */}
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => setShowRulesModal(true)}
+            className="flex items-center justify-center p-2 rounded-lg text-slate-400 bg-slate-800 hover:bg-cyan-600 hover:text-white transition-all border border-slate-700 shadow-sm"
+            title="How to Play"
+          >
+            <HelpCircle size={20} />
+          </button>
+
+          <button 
+            onClick={() => setShowExitModal(true)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition-all shadow-sm ${
+              isSpectator 
+                ? 'bg-slate-500/10 text-slate-400 border border-slate-500/30 hover:bg-slate-500 hover:text-white'
+                : 'bg-red-500/10 text-red-500 border border-red-500/30 hover:bg-red-500 hover:text-white'
+            }`}
+          >
+            <LogOut size={16} /> {isSpectator ? 'Exit' : 'Forfeit'}
+          </button>
+        </div>
       </div>
 
       <div className="relative z-10 flex-1 flex flex-col md:flex-row p-6 gap-6 w-full md:pl-[440px] max-w-[100rem] mx-auto">
