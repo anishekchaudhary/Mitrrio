@@ -1,4 +1,4 @@
-const { handleRoll, handleHold, handleForfeit, checkTurnTimeouts } = require('../services/gameService');
+const { isValidMove, applyMove, handleForfeit, checkTurnTimeouts, getNextPlayingIndex, checkGameEnd } = require('../services/gameService');
 const activeGames = require('../state/activeGames');
 const pendingRemovals = require('../state/pendingRemovals');
 const Party = require('../../models/Party');
@@ -24,28 +24,91 @@ const registerGameHandler = (socket, io) => {
     }
   });
 
-  socket.on('roll_dice', ({ roomCode, userId }) => {
-    const result = handleRoll(roomCode, userId);
-    if (result) {
-      io.to(roomCode).emit('dice_rolled', { userId, roll: result.lastRoll });
-      io.to(roomCode).emit('game_update', result.game);
+  // NEW: Place Piece
+  socket.on('place_piece', ({ roomCode, pieceId, blocksCoords }) => {
+    const game = activeGames.get(roomCode);
+    if (!game || game.status !== 'playing') return;
+
+    const currentPlayer = game.activePlayers[game.turnIndex];
+    if (currentPlayer.id !== socket.userId) {
+      return socket.emit('move_rejected', 'It is not your turn.');
+    }
+
+    const validation = isValidMove(roomCode, socket.userId, pieceId, blocksCoords);
+    if (!validation.valid) {
+      return socket.emit('move_rejected', validation.reason);
+    }
+
+    const updatedGame = applyMove(roomCode, socket.userId, pieceId, blocksCoords);
+    
+    // Check if the move triggered a game over (e.g., last person played their last piece)
+    const finalGame = checkGameEnd(updatedGame);
+    if (finalGame.status === 'finished') {
+      processGameState(io, roomCode, finalGame);
+    } else {
+      io.to(roomCode).emit('game_update', finalGame);
     }
   });
 
-  socket.on('hold_score', ({ roomCode, userId }) => {
-    const updatedGame = handleHold(roomCode, userId);
-    if (updatedGame) processGameState(io, roomCode, updatedGame);
+  // NEW: Skip Turn (Skips current turn only)
+  socket.on('skip_turn', ({ roomCode }) => {
+    const game = activeGames.get(roomCode);
+    if (!game || game.status !== 'playing') return;
+
+    const currentPlayer = game.activePlayers[game.turnIndex];
+    if (currentPlayer.id !== socket.userId) return;
+
+    // Increment consecutive passes (if everyone skips in a row, game ends)
+    game.consecutivePasses += 1;
+
+    io.to(roomCode).emit('receive_message', { 
+      room: roomCode, user: "System", text: `${currentPlayer.username} skipped their turn.`, type: "system_red" 
+    });
+
+    const updatedGame = checkGameEnd(game);
+    
+    if (updatedGame.status === 'finished') {
+      processGameState(io, roomCode, updatedGame);
+    } else {
+      // Advance to the next player and reset the 30-second timer
+      updatedGame.turnIndex = getNextPlayingIndex(updatedGame.activePlayers, updatedGame.turnIndex);
+      updatedGame.turnDeadline = Date.now() + 30000; 
+      io.to(roomCode).emit('game_update', updatedGame);
+    }
   });
 
   socket.on('forfeit_game', ({ roomCode, userId }) => {
     const updatedGame = handleForfeit(roomCode, userId);
     if (updatedGame) {
       io.to(roomCode).emit('receive_message', { room: roomCode, user: "System", text: `Player disconnected and forfeited.`, type: "system_red" });
-      processGameState(io, roomCode, updatedGame);
+      if (updatedGame.status === 'finished') {
+        processGameState(io, roomCode, updatedGame);
+      } else {
+        io.to(roomCode).emit('game_update', updatedGame);
+      }
+    }
+  });
+
+  // NEW: Allows the dashboard to fetch fresh stats
+  socket.on('fetch_user_stats', async (userId) => {
+    try {
+      const dbUser = await User.findById(userId);
+      if (dbUser) {
+        socket.emit('elo_update', { 
+          userId: dbUser._id, 
+          elo: dbUser.elo, 
+          xp: dbUser.xp, 
+          gamesPlayed: dbUser.gamesPlayed || 0, 
+          change: 0 
+        });
+      }
+    } catch (err) {
+      console.error("[Fetch Stats Error]:", err);
     }
   });
 };
 
+// --- YOUR EXISTING MULTI-ELO LOGIC (100% UNTOUCHED) ---
 const processGameState = async (io, roomCode, game) => {
   io.to(roomCode).emit('game_update', game);
 
@@ -97,7 +160,7 @@ const processGameState = async (io, roomCode, game) => {
                 const updatedUser = await User.findByIdAndUpdate(
                   playerA.id, 
                   { $inc: { elo: finalEloChange, xp: xpGain, gamesPlayed: 1 } }, 
-                  { returnDocument: 'after' } 
+                  { new: true } // ⚠️ CHANGED THIS LINE
                 );
                 if (updatedUser) {
                     newElo = updatedUser.elo; 
@@ -161,9 +224,13 @@ const startGameTimerLoop = (io) => {
   setInterval(() => {
     const timeouts = checkTurnTimeouts();
     timeouts.forEach(({ roomCode, game, missedPlayerId }) => {
-      io.to(roomCode).emit('dice_rolled', { userId: missedPlayerId, roll: 'SKIP' });
       io.to(roomCode).emit('receive_message', { room: roomCode, user: 'System', text: 'Turn skipped due to inactivity.', type: 'system_red' });
-      io.to(roomCode).emit('game_update', game);
+      
+      if (game.status === 'finished') {
+        processGameState(io, roomCode, game);
+      } else {
+        io.to(roomCode).emit('game_update', game);
+      }
     });
   }, 1000);
 };

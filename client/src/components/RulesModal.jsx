@@ -1,104 +1,95 @@
-import React, { useState } from 'react';
-import { X, ChevronRight, ChevronLeft, CheckCircle, Info } from 'lucide-react';
+import React from 'react';
+import { X, Grid, AlertTriangle, CheckCircle, RotateCw, Trophy, Target } from 'lucide-react';
 
 const RulesModal = ({ isOpen, onClose }) => {
-  const [currentStep, setCurrentStep] = useState(0);
-
   if (!isOpen) return null;
 
-  const steps = [
-    {
-      title: "The Objective",
-      description: "Mitrrio is a game of risk and reward. The goal is to reach +50 points to win the match. If your score drops to -50, you are eliminated!",
-      image: "/tutorial/step1.png" // Placeholder path for your highlighted image
-    },
-    {
-      title: "Rolling the Dice",
-      description: "On your turn, roll the dice to build your 'Turn Bank'. You can roll as many times as you want! But beware: if you roll a 1, your bank is wiped to 0 and your turn ends immediately.",
-      image: "/tutorial/step2.png"
-    },
-    {
-      title: "Holding (Tug-o-War)",
-      description: "When you have enough points in your bank, click 'Hold'. These points are ADDED to your score, and SUBTRACTED from the next player's score! Tug their health down to eliminate them.",
-      image: "/tutorial/step3.png"
-    }
-  ];
-
-  const handleNext = () => {
-    if (currentStep < steps.length - 1) {
-      setCurrentStep(prev => prev + 1);
-    } else {
-      onClose();
-      setCurrentStep(0); // Reset for next time
-    }
-  };
-
-  const handlePrev = () => {
-    if (currentStep > 0) setCurrentStep(prev => prev - 1);
-  };
-
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-300">
-      <div className="bg-slate-900 border border-slate-700 rounded-3xl overflow-hidden w-full max-w-2xl shadow-2xl relative flex flex-col">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+      <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden relative">
         
-        {/* HEADER */}
         <div className="flex justify-between items-center p-6 border-b border-slate-800 bg-slate-900/50">
-          <h2 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-3">
-            <Info className="text-cyan-400" /> How to Play
+          <h2 className="text-2xl font-black text-white uppercase tracking-widest flex items-center gap-3">
+            <Grid className="text-indigo-400" size={28} /> How to Play
           </h2>
-          <button onClick={() => { onClose(); setCurrentStep(0); }} className="text-slate-500 hover:text-white transition-colors">
+          <button 
+            onClick={onClose}
+            className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-all"
+          >
             <X size={24} />
           </button>
         </div>
 
-        {/* CONTENT */}
-        <div className="p-8 flex-1 flex flex-col items-center text-center">
-          {/* SQUARISH IMAGE BOX */}
-          <div className="w-150 h-128 bg-slate-800 border-2 border-slate-700 rounded-2xl mb-6 shrink-0 overflow-hidden flex items-center justify-center relative shadow-inner mx-auto">
-            <img 
-              src={steps[currentStep].image} 
-              alt={steps[currentStep].title}
-              className="w-full h-full object-cover opacity-90"
-              onError={(e) => {
-                e.target.style.display = 'none';
-                e.target.parentElement.innerHTML = `<span class="text-slate-500 font-bold uppercase tracking-widest text-sm text-center px-4">Add ${steps[currentStep].image}</span>`;
-              }}
-            />
+        <div className="overflow-y-auto p-6 flex flex-col gap-8 custom-scrollbar">
+          
+          <div className="text-slate-300 text-lg leading-relaxed">
+            Welcome to <span className="font-black text-indigo-400">Block Battles</span>. 
+            The goal is simple: place as many of your 21 pieces on the board as possible. 
+            Every single square block you place earns you 1 point. The player with the highest score wins!
           </div>
 
-          <h3 className="text-2xl font-black text-cyan-400 uppercase tracking-widest mb-3">
-            {steps[currentStep].title}
-          </h3>
-          <p className="text-slate-300 font-medium leading-relaxed max-w-lg">
-            {steps[currentStep].description}
-          </p>
+          <div className="space-y-4">
+            <h3 className="text-xl font-black text-white uppercase tracking-widest border-b border-slate-800 pb-2">The 3 Golden Rules</h3>
+            
+            <div className="flex gap-4 items-start bg-slate-800/50 p-4 rounded-xl border border-slate-700">
+              <div className="bg-blue-500/20 text-blue-400 p-3 rounded-lg"><Target size={24} /></div>
+              <div>
+                <h4 className="font-bold text-white text-lg">1. The First Move</h4>
+                <p className="text-slate-400 mt-1">Your very first piece <strong className="text-slate-200">MUST</strong> be placed so that it covers your assigned starting position. You will see a <strong className="text-white">pulsing dot matching your color</strong> on the board telling you where to start.</p>
+              </div>
+            </div>
+
+            <div className="flex gap-4 items-start bg-slate-800/50 p-4 rounded-xl border border-slate-700">
+              <div className="bg-green-500/20 text-green-400 p-3 rounded-lg"><CheckCircle size={24} /></div>
+              <div>
+                <h4 className="font-bold text-white text-lg">2. Corner-to-Corner Only</h4>
+                <p className="text-slate-400 mt-1">Every subsequent piece you play <strong className="text-green-400">MUST touch at least one corner</strong> of another piece of your own color.</p>
+              </div>
+            </div>
+
+            <div className="flex gap-4 items-start bg-slate-800/50 p-4 rounded-xl border border-slate-700">
+              <div className="bg-red-500/20 text-red-400 p-3 rounded-lg"><AlertTriangle size={24} /></div>
+              <div>
+                <h4 className="font-bold text-white text-lg">3. Never Touch Flat Edges</h4>
+                <p className="text-slate-400 mt-1">Your pieces can <strong className="text-red-400">NEVER touch the flat sides/edges</strong> of your own pieces. (However, it is perfectly fine to touch the flat edges of your opponents' pieces!).</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <h3 className="text-xl font-black text-white uppercase tracking-widest border-b border-slate-800 pb-2">Controls & UI</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-slate-800/30 p-4 rounded-xl border border-slate-700/50">
+                <RotateCw className="text-yellow-400 mb-2" size={24} />
+                <h4 className="font-bold text-white">Rotating Pieces</h4>
+                <p className="text-sm text-slate-400 mt-1">Select a piece from your inventory, then press the <kbd className="bg-slate-700 px-2 py-0.5 rounded text-yellow-400 font-mono font-bold mx-1">R</kbd> key on your keyboard to rotate it 90 degrees.</p>
+              </div>
+              <div className="bg-slate-800/30 p-4 rounded-xl border border-slate-700/50">
+                <Grid className="text-cyan-400 mb-2" size={24} />
+                <h4 className="font-bold text-white">Placement Guides</h4>
+                <p className="text-sm text-slate-400 mt-1">When hovering over the board, a <strong className="text-green-400">Green</strong> outline means the move is valid. A <strong className="text-red-400">Red</strong> outline means you are breaking a rule.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-indigo-900/20 border border-indigo-500/30 p-6 rounded-2xl text-center">
+            <Trophy className="text-indigo-400 mx-auto mb-3" size={32} />
+            <h3 className="text-lg font-black text-white uppercase tracking-widest mb-2">Game Over</h3>
+            <p className="text-indigo-200/80 text-sm">
+              If you run out of valid moves, you must click <strong className="text-red-400">Skip Turn</strong>. 
+              The game ends when NO player has any valid moves left. The highest score wins! You have 30 seconds per turn.
+            </p>
+          </div>
+
         </div>
 
-        {/* FOOTER CONTROLS */}
-        <div className="p-6 border-t border-slate-800 bg-slate-950/50 flex items-center justify-between">
-          <div className="flex gap-2">
-            {steps.map((_, idx) => (
-              <div key={idx} className={`w-2.5 h-2.5 rounded-full transition-all ${idx === currentStep ? 'bg-cyan-400 scale-125' : 'bg-slate-700'}`} />
-            ))}
-          </div>
-
-          <div className="flex gap-3">
-            <button 
-              onClick={handlePrev}
-              disabled={currentStep === 0}
-              className="p-3 rounded-xl font-bold bg-slate-800 text-white hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-slate-800 transition-all"
-            >
-              <ChevronLeft size={20} />
-            </button>
-            <button 
-              onClick={handleNext}
-              className={`flex items-center gap-2 px-6 py-3 rounded-xl font-black uppercase tracking-widest text-white transition-all active:scale-95 shadow-lg ${
-                currentStep === steps.length - 1 ? 'bg-green-600 hover:bg-green-500 shadow-green-500/20' : 'bg-cyan-600 hover:bg-cyan-500 shadow-cyan-500/20'
-              }`}
-            >
-              {currentStep === steps.length - 1 ? <><CheckCircle size={20}/> Got it!</> : <>Next <ChevronRight size={20}/></>}
-            </button>
-          </div>
+        <div className="p-6 border-t border-slate-800 bg-slate-900/80">
+          <button 
+            onClick={onClose}
+            className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg"
+          >
+            I'm Ready to Play
+          </button>
         </div>
 
       </div>

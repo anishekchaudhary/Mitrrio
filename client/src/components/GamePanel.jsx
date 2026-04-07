@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Eye, CheckCircle, Swords } from 'lucide-react';
+import { Play, Eye, CheckCircle, Grid } from 'lucide-react';
 
 const GamePanel = ({ username, color, onPlay, onSpectate, inParty, isReady, isSpectator, isGameRunning }) => {
   return (
@@ -7,8 +7,9 @@ const GamePanel = ({ username, color, onPlay, onSpectate, inParty, isReady, isSp
       
       <div className="mb-8 text-center w-full pb-6 border-b border-slate-700/50">
         <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400 tracking-widest uppercase flex items-center justify-center gap-3 drop-shadow-lg">
-          <Swords size={28} className="text-indigo-400" /> Mitrrio
+          <Grid size={28} className="text-indigo-400" /> Mitrrio
         </h1>
+        <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-2">Block Battles</p>
       </div>
 
       <div className="w-24 h-24 rounded-full mb-6 border-4 shadow-lg flex items-center justify-center bg-slate-800" style={{ borderColor: color }}>

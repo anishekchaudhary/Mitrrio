@@ -42,12 +42,20 @@ const Dashboard = () => {
 
     const gid = Math.floor(1000 + Math.random() * 9000);
     const guestUser = {
-      name: `Guest_${gid}`, username: `Guest_${gid}`, id: `guest_${gid}`, isLoggedIn: false, elo: 1000, xp: 0
+      name: `Guest_${gid}`, username: `Guest_${gid}`, id: `guest_${gid}`, isLoggedIn: false, elo: 1000, xp: 0, gamesPlayed: 0
     };
 
     localStorage.setItem('user', JSON.stringify(guestUser));
     return guestUser;
   });
+
+  // Background Data Sync - Auto-fetch fresh stats on load
+  useEffect(() => {
+    if (socket && user) {
+      const currentUserId = user.id || user._id;
+      socket.emit('fetch_user_stats', currentUserId);
+    }
+  }, [user.id, user._id]);
 
   useEffect(() => {
     const hasSeenTutorial = localStorage.getItem('hasSeenTutorial');
@@ -211,7 +219,6 @@ const Dashboard = () => {
       
       <RulesModal isOpen={showRulesModal} onClose={() => setShowRulesModal(false)} />
 
-      {/* --- ADDED SPACE HERE: right-[408px] -> right-[420px] --- */}
       <button 
         onClick={() => setShowRulesModal(true)}
         className="hidden md:flex absolute top-6 right-[420px] z-40 bg-slate-800/80 hover:bg-cyan-600 border border-slate-700 text-slate-300 hover:text-white p-3 rounded-2xl shadow-xl transition-all group backdrop-blur-md items-center justify-center"
@@ -289,7 +296,7 @@ const Dashboard = () => {
              <ProfileWidget 
               user={user} 
             onLogout={handleLogout} 
-              onUpdateUsername={handleUpdateUsername} // <-- Add this
+              onUpdateUsername={handleUpdateUsername} 
               onNavigate={(m) => { setAuthMode(m); setShowAuthModal(true); }} 
             />
           </div>
