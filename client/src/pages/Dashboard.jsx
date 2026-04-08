@@ -73,11 +73,6 @@ const Dashboard = () => {
       if (userId) {
         socket.emit("identify", userId);
         socket.emit("sync_party_state", user); 
-        
-        // ⚠️ CRITICAL FIX: Ask for fresh Database stats the precise second we reconnect to the Dashboard!
-        if (user.isLoggedIn && !String(userId).startsWith('guest')) {
-           socket.emit('fetch_user_stats', userId);
-        }
       }
     };
 
