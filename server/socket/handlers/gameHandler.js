@@ -5,6 +5,7 @@ const Party = require('../../models/Party');
 const { resetPartyReadiness, broadcastPartyUpdate } = require('../services/partyService');
 const User = require('../../models/User');
 const Match = require('../../models/Match');
+const mongoose = require('mongoose');
 
 const registerGameHandler = (socket, io) => {
   
@@ -16,7 +17,7 @@ const registerGameHandler = (socket, io) => {
     const game = activeGames.get(roomCode);
     if (game) {
       socket.join(roomCode); 
-      const isPlaying = game.activePlayers.some(p => p.id === socket.userId);
+      const isPlaying = game.activePlayers.some(p => String(p.id) === String(socket.userId));
       if (!isPlaying) socket.join(`${roomCode}_spectator`);
       socket.emit('game_update', game);
     } else {
@@ -24,55 +25,55 @@ const registerGameHandler = (socket, io) => {
     }
   });
 
-  // NEW: Place Piece
+  socket.on('fetch_user_stats', async (userId) => {
+    try {
+      if (!userId || String(userId).startsWith('guest') || !mongoose.Types.ObjectId.isValid(userId)) return;
+      const dbUser = await User.findById(userId);
+      if (dbUser) {
+        socket.emit('elo_update', { 
+          userId: dbUser._id, elo: dbUser.elo, xp: dbUser.xp, gamesPlayed: dbUser.gamesPlayed || 0, change: 0 
+        });
+      }
+    } catch (err) {
+      console.error("[Fetch Stats Error]:", err);
+    }
+  });
+
   socket.on('place_piece', ({ roomCode, pieceId, blocksCoords }) => {
     const game = activeGames.get(roomCode);
     if (!game || game.status !== 'playing') return;
 
     const currentPlayer = game.activePlayers[game.turnIndex];
-    if (currentPlayer.id !== socket.userId) {
-      return socket.emit('move_rejected', 'It is not your turn.');
-    }
+    if (String(currentPlayer.id) !== String(socket.userId)) return socket.emit('move_rejected', 'It is not your turn.');
 
     const validation = isValidMove(roomCode, socket.userId, pieceId, blocksCoords);
-    if (!validation.valid) {
-      return socket.emit('move_rejected', validation.reason);
-    }
+    if (!validation.valid) return socket.emit('move_rejected', validation.reason);
 
     const updatedGame = applyMove(roomCode, socket.userId, pieceId, blocksCoords);
-    
-    // Check if the move triggered a game over (e.g., last person played their last piece)
     const finalGame = checkGameEnd(updatedGame);
-    if (finalGame.status === 'finished') {
-      processGameState(io, roomCode, finalGame);
-    } else {
-      io.to(roomCode).emit('game_update', finalGame);
-    }
+
+    if (finalGame.status === 'finished') processGameState(io, roomCode, finalGame);
+    else io.to(roomCode).emit('game_update', finalGame);
   });
 
-  // NEW: Skip Turn (Skips current turn only)
   socket.on('skip_turn', ({ roomCode }) => {
     const game = activeGames.get(roomCode);
     if (!game || game.status !== 'playing') return;
 
     const currentPlayer = game.activePlayers[game.turnIndex];
-    if (currentPlayer.id !== socket.userId) return;
+    if (String(currentPlayer.id) !== String(socket.userId)) return;
 
-    // Increment consecutive passes (if everyone skips in a row, game ends)
     game.consecutivePasses += 1;
-
     io.to(roomCode).emit('receive_message', { 
       room: roomCode, user: "System", text: `${currentPlayer.username} skipped their turn.`, type: "system_red" 
     });
 
     const updatedGame = checkGameEnd(game);
-    
     if (updatedGame.status === 'finished') {
       processGameState(io, roomCode, updatedGame);
     } else {
-      // Advance to the next player and reset the 30-second timer
       updatedGame.turnIndex = getNextPlayingIndex(updatedGame.activePlayers, updatedGame.turnIndex);
-      updatedGame.turnDeadline = Date.now() + 30000; 
+      updatedGame.turnDeadline = Date.now() + 30000;
       io.to(roomCode).emit('game_update', updatedGame);
     }
   });
@@ -80,35 +81,13 @@ const registerGameHandler = (socket, io) => {
   socket.on('forfeit_game', ({ roomCode, userId }) => {
     const updatedGame = handleForfeit(roomCode, userId);
     if (updatedGame) {
-      io.to(roomCode).emit('receive_message', { room: roomCode, user: "System", text: `Player disconnected and forfeited.`, type: "system_red" });
-      if (updatedGame.status === 'finished') {
-        processGameState(io, roomCode, updatedGame);
-      } else {
-        io.to(roomCode).emit('game_update', updatedGame);
-      }
-    }
-  });
-
-  // NEW: Allows the dashboard to fetch fresh stats
-  socket.on('fetch_user_stats', async (userId) => {
-    try {
-      const dbUser = await User.findById(userId);
-      if (dbUser) {
-        socket.emit('elo_update', { 
-          userId: dbUser._id, 
-          elo: dbUser.elo, 
-          xp: dbUser.xp, 
-          gamesPlayed: dbUser.gamesPlayed || 0, 
-          change: 0 
-        });
-      }
-    } catch (err) {
-      console.error("[Fetch Stats Error]:", err);
+      io.to(roomCode).emit('receive_message', { room: roomCode, user: "System", text: `A player has forfeited.`, type: "system_red" });
+      if (updatedGame.status === 'finished') processGameState(io, roomCode, updatedGame);
+      else io.to(roomCode).emit('game_update', updatedGame);
     }
   });
 };
 
-// --- YOUR EXISTING MULTI-ELO LOGIC (100% UNTOUCHED) ---
 const processGameState = async (io, roomCode, game) => {
   io.to(roomCode).emit('game_update', game);
 
@@ -119,48 +98,60 @@ const processGameState = async (io, roomCode, game) => {
       await resetPartyReadiness(roomCode);
       const finishedPlayers = game.finished;
       
-      const registeredIds = finishedPlayers.map(p => p.id).filter(id => !id.toString().startsWith('guest'));
+      const registeredIds = finishedPlayers
+          .map(p => p.id)
+          .filter(id => id && !String(id).startsWith('guest') && mongoose.Types.ObjectId.isValid(id));
+          
       const userDocs = await User.find({ _id: { $in: registeredIds } });
       const userMap = new Map(userDocs.map(u => [u._id.toString(), u]));
 
-      const party = await Party.findOne({ code: roomCode });
+      let party = null;
+      try { party = await Party.findOne({ code: roomCode }); } catch(e) {}
 
       for (let i = 0; i < finishedPlayers.length; i++) {
         const playerA = finishedPlayers[i];
-        const isGuest = playerA.id.toString().startsWith('guest');
+        const playerId = playerA.id;
+        const isGuest = String(playerId).startsWith('guest');
         
-        // STRICT FALLBACKS: Uses ?? to respect "0" xp and gamesPlayed
-        let currentEloA = isGuest ? (playerA.elo ?? 1200) : (userMap.get(playerA.id.toString())?.elo ?? 1200);
-        let currentXpA = isGuest ? (playerA.xp ?? 0) : (userMap.get(playerA.id.toString())?.xp ?? 0);
-        let currentGamesA = isGuest ? (playerA.gamesPlayed ?? 0) : (userMap.get(playerA.id.toString())?.gamesPlayed ?? 0);
+        let currentEloA = isGuest ? (playerA.elo ?? 1200) : (userMap.get(String(playerId))?.elo ?? 1200);
+        let currentXpA = isGuest ? (playerA.xp ?? 0) : (userMap.get(String(playerId))?.xp ?? 0);
+        let currentGamesA = isGuest ? (playerA.gamesPlayed ?? 0) : (userMap.get(String(playerId))?.gamesPlayed ?? 0);
 
         let totalEloChange = 0;
 
-        for (let j = 0; j < finishedPlayers.length; j++) {
-          if (i === j) continue;
-          const playerB = finishedPlayers[j];
-          let currentEloB = playerB.id.toString().startsWith('guest') ? (playerB.elo ?? 1200) : (userMap.get(playerB.id.toString())?.elo ?? 1200);
+        // ⚠️ FIXED: Safe Elo math ensuring no NaN returns
+        if (finishedPlayers.length > 1) {
+            for (let j = 0; j < finishedPlayers.length; j++) {
+              if (i === j) continue;
+              const playerB = finishedPlayers[j];
+              let currentEloB = String(playerB.id).startsWith('guest') ? (playerB.elo ?? 1200) : (userMap.get(String(playerB.id))?.elo ?? 1200);
 
-          const expectedScoreA = 1 / (1 + Math.pow(10, (currentEloB - currentEloA) / 400));
-          const actualScoreA = playerA.rank < playerB.rank ? 1 : 0; 
-          totalEloChange += 32 * (actualScoreA - expectedScoreA);
+              const expectedScoreA = 1 / (1 + Math.pow(10, (currentEloB - currentEloA) / 400));
+              
+              let actualScoreA;
+              if (playerA.rank < playerB.rank) actualScoreA = 1;
+              else if (playerA.rank > playerB.rank) actualScoreA = 0;
+              else actualScoreA = 0.5; // Ties
+
+              totalEloChange += 32 * (actualScoreA - expectedScoreA);
+            }
         }
 
         const divisor = Math.max(1, finishedPlayers.length - 1);
-        const finalEloChange = Math.round(totalEloChange / divisor);
-        const rankBonus = Math.max(0, (finishedPlayers.length - playerA.rank) * 15);
+        const finalEloChange = Math.round(totalEloChange / divisor) || 0;
+        const rankBonus = Math.max(0, (finishedPlayers.length - playerA.rank) * 15) || 0;
         const xpGain = 50 + rankBonus;
 
         let newElo = currentEloA + finalEloChange;
         let newXp = currentXpA + xpGain;
         let newGames = currentGamesA + 1;
 
-        if (!isGuest) {
+        if (!isGuest && mongoose.Types.ObjectId.isValid(playerId)) {
             try {
                 const updatedUser = await User.findByIdAndUpdate(
-                  playerA.id, 
+                  playerId, 
                   { $inc: { elo: finalEloChange, xp: xpGain, gamesPlayed: 1 } }, 
-                  { new: true } // ⚠️ CHANGED THIS LINE
+                  { new: true } 
                 );
                 if (updatedUser) {
                     newElo = updatedUser.elo; 
@@ -173,7 +164,7 @@ const processGameState = async (io, roomCode, game) => {
         }
 
         if (party) {
-            const partyMember = party.members.find(m => m.id === playerA.id);
+            const partyMember = party.members.find(m => String(m.id) === String(playerId));
             if (partyMember) {
                 partyMember.elo = newElo;
                 partyMember.xp = newXp;
@@ -181,8 +172,8 @@ const processGameState = async (io, roomCode, game) => {
             }
         }
 
-        io.to(roomCode).emit('elo_update', { 
-            userId: playerA.id, elo: newElo, xp: newXp, gamesPlayed: newGames, change: finalEloChange 
+        io.emit('elo_update', { 
+            userId: playerId, elo: newElo, xp: newXp, gamesPlayed: newGames, change: finalEloChange 
         });
       }
 
@@ -190,16 +181,11 @@ const processGameState = async (io, roomCode, game) => {
           const newMatch = new Match({
               roomCode: roomCode,
               players: finishedPlayers.map(p => ({
-                  username: p.username,
-                  score: p.score,
-                  rank: p.rank
+                  username: p.username, score: p.score, rank: p.rank
               }))
           });
           await newMatch.save();
-      } catch (matchErr) {
-          console.error("[Match Save Error]:", matchErr);
-      }
-
+      } catch (matchErr) {}
 
       activeGames.delete(roomCode);
 
@@ -226,11 +212,8 @@ const startGameTimerLoop = (io) => {
     timeouts.forEach(({ roomCode, game, missedPlayerId }) => {
       io.to(roomCode).emit('receive_message', { room: roomCode, user: 'System', text: 'Turn skipped due to inactivity.', type: 'system_red' });
       
-      if (game.status === 'finished') {
-        processGameState(io, roomCode, game);
-      } else {
-        io.to(roomCode).emit('game_update', game);
-      }
+      if (game.status === 'finished') processGameState(io, roomCode, game);
+      else io.to(roomCode).emit('game_update', game);
     });
   }, 1000);
 };

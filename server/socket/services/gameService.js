@@ -1,18 +1,15 @@
-// server/socket/services/gameService.js
 const activeGames = require('../state/activeGames');
 const { POLYOMINOES, generateStartingInventory } = require('../../utils/polyominoes');
 
 const TURN_TIME_LIMIT = 30000;
 
-// NEW: Calculates tight grid sizes to force competitive blocking
 const getDynamicBoardSize = (playerCount) => {
   if (playerCount <= 2) return 14;
   if (playerCount === 3) return 17;
   if (playerCount === 4) return 20;
-  return 20 + ((playerCount - 4) * 2); // 5->22, 6->24, 7->26... 10->32
+  return 20 + ((playerCount - 4) * 2); 
 };
 
-// NEW: Dynamically finds corners and midpoints based on the exact board size
 const getStartingPositions = (playerCount, boardSize) => {
   const max = boardSize - 1;
   const mid = Math.floor(boardSize / 2);
@@ -20,11 +17,10 @@ const getStartingPositions = (playerCount, boardSize) => {
   const q3 = Math.floor((boardSize * 3) / 4);
 
   const positions = [
-    [0, 0], [max, max], [0, max], [max, 0],           // 1-4: The 4 Corners
-    [mid, 0], [mid, max], [0, mid], [max, mid],       // 5-8: The 4 Edge Midpoints
-    [q1, 0], [q3, max]                                // 9-10: Offset edge points
+    [0, 0], [max, max], [0, max], [max, 0],           
+    [mid, 0], [mid, max], [0, mid], [max, mid],       
+    [q1, 0], [q3, max]                                
   ];
-
   return positions.slice(0, playerCount);
 };
 
@@ -32,11 +28,8 @@ const createGame = (roomCode, members) => {
   const activeMembers = members.filter(m => !m.isSpectator);
   const spectatorMembers = members.filter(m => m.isSpectator);
 
-  // Apply the competitive sizing logic
   const boardSize = getDynamicBoardSize(activeMembers.length);
   const board = Array.from({ length: boardSize }, () => Array(boardSize).fill(null));
-  
-  // Get positions based on the newly calculated size
   const startPositions = getStartingPositions(activeMembers.length, boardSize);
 
   const gameData = {
@@ -49,20 +42,20 @@ const createGame = (roomCode, members) => {
     boardSize,
     
     activePlayers: activeMembers.map((m, index) => ({
-      id: m.id, 
-      username: m.username, 
+      id: String(m.id || m._id || m.userId),
+      username: m.username || m.name, 
       color: m.color,
       score: 0, 
       piecesLeft: generateStartingInventory(),
       matchState: 'playing',
-      startPos: startPositions[index], // Assign unique starting point!
+      startPos: startPositions[index], 
       elo: m.elo || 1200,              
       xp: m.xp || 0,                   
       gamesPlayed: m.gamesPlayed || 0  
     })),
     spectators: spectatorMembers.map(m => ({
-      id: m.id, 
-      username: m.username, 
+      id: String(m.id || m._id || m.userId), 
+      username: m.username || m.name, 
       color: m.color
     })),
     finished: []
@@ -85,8 +78,8 @@ const getNextPlayingIndex = (players, startIndex) => {
 const findGameByUserId = (userId) => {
   for (const [roomCode, game] of activeGames.entries()) {
     if (game.status === 'playing') {
-      const isPlayer = game.activePlayers.some(p => p.id === userId);
-      const isSpectator = game.spectators && game.spectators.some(p => p.id === userId);
+      const isPlayer = game.activePlayers.some(p => String(p.id) === String(userId));
+      const isSpectator = game.spectators && game.spectators.some(p => String(p.id) === String(userId));
       if (isPlayer || isSpectator) return { roomCode, game };
     }
   }
@@ -106,7 +99,7 @@ const isValidMove = (roomCode, userId, pieceId, blocksCoords) => {
   const game = activeGames.get(roomCode);
   if (!game || game.status !== 'playing') return { valid: false, reason: "Game is not active." };
 
-  const player = game.activePlayers.find(p => p.id === userId);
+  const player = game.activePlayers.find(p => String(p.id) === String(userId));
   if (!player || player.matchState !== 'playing') return { valid: false, reason: "You cannot play." };
   if (!player.piecesLeft.includes(pieceId)) return { valid: false, reason: "Piece already played." };
   if (blocksCoords.length !== POLYOMINOES[pieceId].size) return { valid: false, reason: "Invalid piece shape." };
@@ -147,7 +140,7 @@ const isValidMove = (roomCode, userId, pieceId, blocksCoords) => {
 
 const applyMove = (roomCode, userId, pieceId, blocksCoords) => {
   const game = activeGames.get(roomCode);
-  const player = game.activePlayers.find(p => p.id === userId);
+  const player = game.activePlayers.find(p => String(p.id) === String(userId));
   
   blocksCoords.forEach(([x, y]) => { game.board[y][x] = player.color; });
   
@@ -165,15 +158,15 @@ const handleForfeit = (roomCode, userId) => {
   const game = activeGames.get(roomCode);
   if (!game || game.status !== 'playing') return null;
 
-  const playerIndex = game.activePlayers.findIndex(p => p.id === userId);
+  const playerIndex = game.activePlayers.findIndex(p => String(p.id) === String(userId));
   if (playerIndex === -1) return null;
 
   const player = game.activePlayers[playerIndex];
   if (player.matchState !== 'playing') return null;
 
+  // Penalize score and permanently eliminate
   player.score = -999; 
   player.matchState = 'eliminated';
-  game.consecutivePasses += 1;
   
   if (game.turnIndex === playerIndex) {
     game.turnIndex = getNextPlayingIndex(game.activePlayers, game.turnIndex);
@@ -201,12 +194,21 @@ const checkTurnTimeouts = () => {
 };
 
 const checkGameEnd = (game) => {
+  // Count how many players haven't forfeited
   const activeCount = game.activePlayers.filter(p => p.matchState === 'playing').length;
-  if (game.consecutivePasses >= activeCount || activeCount === 0 || getNextPlayingIndex(game.activePlayers, game.turnIndex) === -1) {
+  
+  // ⚠️ CRITICAL FIX: Ends instantly if 1 or 0 players are left, triggering DB update
+  if (activeCount <= 1 || game.consecutivePasses >= activeCount || getNextPlayingIndex(game.activePlayers, game.turnIndex) === -1) {
     game.status = 'finished';
-    game.finished = [...game.activePlayers]
-        .sort((a, b) => b.score - a.score)
-        .map((p, index) => ({ ...p, rank: index + 1 }));
+    
+    game.finished = [...game.activePlayers].sort((a, b) => b.score - a.score);
+    let currentRank = 1;
+    for (let i = 0; i < game.finished.length; i++) {
+        if (i > 0 && game.finished[i].score < game.finished[i - 1].score) {
+            currentRank = i + 1;
+        }
+        game.finished[i].rank = currentRank;
+    }
   }
   return game;
 };
