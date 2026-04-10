@@ -82,12 +82,11 @@ UserSchema.index({ createdAt: 1 }, {
  * PRE-SAVE HOOK
  * Automatically generates a guest username if one isn't provided.
  */
-UserSchema.pre('save', function(next) {
+UserSchema.pre('save', async function() {
   if (this.isGuest && !this.username) {
     // Generates a name like Guest_a1b2
     this.username = `Guest_${this._id.toString().slice(-4)}`;
   }
-  next();
 });
 
 module.exports = mongoose.model('User', UserSchema);
