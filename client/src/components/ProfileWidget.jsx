@@ -125,7 +125,7 @@ const ProfileWidget = ({ user, onLogout, onNavigate, onUpdateUsername }) => {
       {/* STATS GRID */}
       <div className="grid grid-cols-2 gap-2 mb-6">
         <div className="bg-slate-950/50 p-3 rounded-xl border border-slate-800 flex flex-col items-center justify-center">
-           <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">MMR</span>
+           <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">ELO</span>
            <span className="text-xl font-black text-white flex items-center gap-1">
              <Trophy size={14} className="text-yellow-500"/> {user.elo || 1000}
            </span>
