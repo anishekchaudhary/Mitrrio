@@ -44,43 +44,50 @@ The project uses a monorepo structure, separating the client and server environm
 ```bash
 git clone [https://github.com/YOUR_GITHUB_USERNAME/Mitrrio.git](https://github.com/YOUR_GITHUB_USERNAME/Mitrrio.git)
 cd Mitrrio
-2. Backend Setup (Server)
+```
+###2. Backend Setup (Server)
 Open a terminal and navigate to the server directory:
 
-Bash
+```Bash
 cd server
 npm install
+```
 Create a .env file in the /server directory and add the following variables:
 
-Code snippet
+```Code snippet
 PORT=5000
 MONGODB_URI=your_mongodb_connection_string
 JWT_SECRET=your_super_secret_jwt_key
 CLIENT_URL=http://localhost:5173
+```
 Start the backend server:
 
-Bash
+```Bash
 npm run dev
+```
 3. Frontend Setup (Client)
 Open a new terminal window and navigate to the client directory:
 
-Bash
+```Bash
 cd client
 npm install
+```
 Create a .env file in the /client directory and add the following variable:
 
-Code snippet
+```Code snippet
 VITE_SERVER_URL=http://localhost:5000
+```
 Start the frontend development server:
 
-Bash
+```Bash
 npm run dev
+```
 4. Play the Game
 Open your browser and navigate to http://localhost:5173 to start playing!
 
-📂 Code Structure Overview
+Code Structure Overview
 Plaintext
-Mitrrio/
+```Mitrrio/
 ├── client/                 # React Frontend Environment
 │   ├── src/
 │   │   ├── components/     # Reusable UI widgets (Chat, GamePanel, Lobby)
@@ -94,7 +101,8 @@ Mitrrio/
 │   ├── utils/              # Server-side logic (Elo calculations, grid validation)
 │   └── server.js           # Express app and server initialization
 └── README.md
-👥 Contributors
+```
+## Contributors
 Anishek Chaudhary (@anishekchaudhary) - Engine Integration, Deployment, Auth Systems
 
 Rohit (@ImprovingEveryday) - Game Mechanics, Socket Architecture, Core Loop
