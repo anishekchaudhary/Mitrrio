@@ -13,3 +13,4 @@ const getUniqueColor = (existingMembers) => {
 };
 
 module.exports = { getAssignedColor, getUniqueColor, PLAYER_COLORS };
+// Note: The getUniqueColor function is designed to assign a color that hasn't been taken by existing party members. If all colors are taken, it will fallback to a deterministic assignment based on the number of members, ensuring that every player gets a color even in large parties.
